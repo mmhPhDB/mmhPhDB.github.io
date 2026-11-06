@@ -17,8 +17,10 @@ function ssSet(k, v) { try { if (v) sessionStorage.setItem(k, v); else sessionSt
 function rnd32() { var a = new Uint8Array(16); (window.crypto || window.msCrypto).getRandomValues(a); return Array.prototype.map.call(a, function (b) { return (b + 256).toString(16).slice(-2); }).join(""); }
 
 (function () {
-  var m = /(?:^#|&)x=([A-Za-z0-9_-]{20,120})(?:&|$)/.exec(location.hash || "");
+  var m = /(?:^#|&)x=([A-Za-z0-9_-]{20,120})(?:&|$)/.exec(location.hash || ""), cx = "";
+  try { if (typeof window.PH_X === "string" && XRE.test(window.PH_X)) cx = window.PH_X; } catch (e) {  }
   if (m) { X = m[1]; lsSet("phx", X); try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {  } }
+  else if (cx) { X = cx; lsSet("phx", X); }
   else X = XRE.test(lsGet("phx")) ? lsGet("phx") : "";
   DK = TRE.test(lsGet("phdk")) ? lsGet("phdk") : rnd32(); lsSet("phdk", DK);
   T = TRE.test(ssGet("pht")) ? ssGet("pht") : "";
@@ -51,7 +53,7 @@ function call(fn, args, opt) {
         ok(j.r);
       }, function (err) {
         if (n < tries) { setTimeout(go, 900 * n); return; }
-        var e = new Error("連不上（" + String(err && err.message || err) + "），網路好了再試一次"); e.net = true; bad(e);
+        var off = navigator.onLine === false, e = new Error(off ? "連不上（沒有網路），網路好了再試一次" : "連不上 PH資料庫的後端（" + String(err && err.message || err) + "）：網路正常的話，請開發者執行 yzPhCheck 檢查"); e.net = true; bad(e);
       });
     }
     go();
@@ -67,7 +69,7 @@ function title(sub) { return [h("h1", { class: "ph-t" }, ["🗂 PH資料庫"]), 
 function msgEl() { return h("div", { class: "ph-msg", role: "status", "aria-live": "polite" }); }
 
 function scrNoX() {
-  card(title("請用書籤連結打開").concat([h("p", { class: "ph-note", text: "這一台還不知道 PH資料庫在哪裡：第一次一定要用開發者給的「書籤連結」打開（打開一次以後這一台就記住了）。" })]));
+  card(title("網站還沒設定好").concat([h("p", { class: "ph-note", text: "這一台還不知道 PH資料庫在哪裡：請開發者在網站放 cfg.js（Apps Script 執行 yzPhLink 會給內容）。" })]));
 }
 
 function scrLogin(why) {
