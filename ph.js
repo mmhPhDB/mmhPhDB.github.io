@@ -1495,10 +1495,11 @@ function showPdf(rec, tag) {
     var dl = el("a", { class: "btn", href: url, download: o.file || "qc.pdf", text: "⬇ 下載 PDF" }), op = el("a", { class: "btn", href: url, target: "_blank", rel: "noopener", text: "↗ 另開" }), x = el("button", { type: "button", class: "btn", text: "關閉" });
     var pr = el("button", { type: "button", class: "btn pri pvprint", text: "🖨 列印" }); pr.onclick = function () { printRecs([o]); };
     var C = SITES[o.site] || { name: "" };
-    var v = el("div", { class: "pdfv", role: "dialog", "aria-modal": "true", "aria-label": "PDF" }, [el("div", { class: "pvbar" }, [el("b", { text: "📄 " + (tag ? "【" + tag + "】" : "") + C.name + "　" + FORMS[o.form || "bag"] + "　" + fmtAt(o.at) }), pr, op, dl, x]), el("div", { class: "pvbody" }, pagesOf(o).map(function (u, i) { return el("img", { src: u, alt: "PDF 第 " + (i + 1) + " 頁" }); }))]);
+    var v = el("div", { class: "pdfv", role: "dialog", "aria-modal": "true", "aria-label": "PDF" }, [el("div", { class: "pvbar" }, [el("b", { text: "📄 " + (tag ? "【" + tag + "】" : "") + C.name + "　" + FORMS[o.form || "bag"] + "　" + fmtAt(o.at) }), pr, op, dl, x]), el("div", { class: "pvbody", style: "display:block;text-align:center" }, pagesOf(o).map(function (u, i) { return el("img", { src: u, alt: "PDF 第 " + (i + 1) + " 頁", style: "display:block;margin:0 auto 14px" }); }))]);
     x.onclick = function () { v.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 3e4); };
     v.addEventListener("keydown", function (e) { if (e.key === "Escape") x.onclick(); });
-    ovl().appendChild(v); x.focus();
+    ovl().appendChild(v); x.focus({ preventScroll: true });
+    var pb = v.querySelector(".pvbody"); if (pb) { pb.scrollTop = 0; setTimeout(function () { pb.scrollTop = 0; }, 60); }
   };
   if (rec.pdf && rec.pngs) go(rec); else { toast("PDF 拿取中…"); fetchPdf(rec).then(go, function (e) { toast("打不開 PDF：" + errText(e)); }); }
 }
