@@ -596,7 +596,6 @@ function render() {
     tb.appendChild(body);
   }
   P.appendChild(el("div", { class: "tscroll" }, [tb]));
-  P.appendChild(attBox("bag"));
 }
 var TOUCH = !!(window.matchMedia && matchMedia("(pointer:coarse)").matches);
 function codeChar(e) { var c = e.code || ""; if (/^Key[A-Z]$/.test(c)) return c.slice(3); if (/^(Digit|Numpad)[0-9]$/.test(c)) return c.slice(-1); if (c === "Minus" || c === "NumpadSubtract") return "-"; return ""; }
@@ -977,7 +976,8 @@ function submitNew(rec, data) {
     m.appendChild(el("div", { class: "okm drv", text: "☁ 存在雲端硬碟：" + (x.path || x.file) }));
     var b = el("button", { type: "button", class: "btn", text: "👀 看這一份 PDF" }); b.onclick = function () { showPdf(nr); }; m.appendChild(b);
     var bp = el("button", { type: "button", class: "btn", style: "margin-left:8px", text: "🖨 列印" }); bp.onclick = function () { printRecs([nr]); }; m.appendChild(bp);
-    showPdf(nr);
+    toast("✅ 送出了，可以填下一張");
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
   }, function (e) { sendBtns(false); failMsg(e); });
 }
 function wipeSigs(rec) {
