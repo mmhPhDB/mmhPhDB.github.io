@@ -79,7 +79,9 @@ function card(kids, cls) {
   APP.className = "ph-app"; APP.innerHTML = "";
   APP.appendChild(h("div", { class: "ph-scr " + (cls || "") }, [h("div", { class: "ph-card" }, kids)]));
 }
-function title(sub) { return [h("h1", { class: "ph-t" }, ["🗂 PH資料庫"]), sub ? h("p", { class: "ph-sub", text: sub }) : null]; }
+function phLogo(c) { return h("img", { class: c || "ph-logo", src: "ph-logo-192.png", alt: "", width: "80", height: "80", decoding: "async" }); }
+function phBrand() { return h("b", { class: "ph-bt" }, [h("span", { class: "ph-badge" }, [phLogo("ph-blogo")]), "PH資料庫"]); }
+function title(sub) { return [h("div", { class: "ph-head" }, [phLogo(), h("h1", { class: "ph-t", text: "PH資料庫" })]), sub ? h("p", { class: "ph-sub", text: sub }) : null]; }
 function msgEl() { return h("div", { class: "ph-msg", role: "status", "aria-live": "polite" }); }
 
 function scrNoX() {
@@ -158,7 +160,7 @@ function main() {
   var who = h("span", { class: "ph-who", text: (ME.name || "") + (ME.emp ? " " + ME.emp : "") + (ME.dev ? "（開發者）" : "") });
   var idle = h("span", { class: "ph-idle", id: "ph-idle" });
   var out = h("button", { type: "button", class: "ph-out", id: "ph-out", text: "登出" }); out.onclick = function () { bye(false); };
-  APP.appendChild(h("header", { class: "ph-bar" }, [h("b", { class: "ph-bt", text: "🗂 PH資料庫" }), h("span", { class: "ph-bs" }, [who, idle, out])]));
+  APP.appendChild(h("header", { class: "ph-bar" }, [phBrand(), h("span", { class: "ph-bs" }, [who, idle, out])]));
   var col = h("main", { class: "ph-main" });
   APP.appendChild(col);
   wm();
@@ -405,7 +407,7 @@ function scrShare() {
     if (!r || !r.ok || !r.sum) { card(title("QR 打不開").concat([h("p", { class: "ph-note", text: (r && r.err) || (j && j.err) || "請再跟主管要一個新的 QR。" })])); return; }
     APP.className = "ph-app in"; APP.innerHTML = "";
     var left = h("span", { class: "ph-who", id: "ph-qrleft" });
-    APP.appendChild(h("header", { class: "ph-bar" }, [h("b", { class: "ph-bt", text: "🗂 PH資料庫" }), h("span", { class: "ph-bs" }, [left])]));
+    APP.appendChild(h("header", { class: "ph-bar" }, [phBrand(), h("span", { class: "ph-bs" }, [left])]));
     var col = h("main", { class: "ph-main" }), wrap = h("div", { class: "qcz qcroot phshr" }), inner = h("div", { class: "wrap" });
     wrap.appendChild(inner); col.appendChild(wrap); APP.appendChild(col);
     wm("QR 檢視");

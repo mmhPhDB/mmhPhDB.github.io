@@ -1,0 +1,14 @@
+{
+  "name": "PH資料庫",
+  "short_name": "PH資料庫",
+  "start_url": "./",
+  "scope": "./",
+  "display": "standalone",
+  "background_color": "#EEF2F1",
+  "theme_color": "#0F3B36",
+  "icons": [
+    { "src": "ph-logo-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "ph-logo.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "ph-logo-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}
