@@ -1,5 +1,5 @@
 "use strict";
-var PHV = "1.1（第 76 批）";
+var PHV = "1.2（第 77 批・資安）";
 var XRE = /^[A-Za-z0-9_-]{20,120}$/, TRE = /^[0-9a-f]{32}$/;
 var X = "", T = "", DK = "", SHR = "", ME = null, IDLE_MIN = 30, LAST = Date.now(), PING = 0, IDT = 0;
 var APP = null;
@@ -31,11 +31,13 @@ function xdec(c) {
   try { if (!cx && typeof window.PH_XC === "string") cx = xdec(window.PH_XC); if (!cx && typeof window.PH_X === "string" && XRE.test(window.PH_X)) cx = window.PH_X; } catch (e) {  }
   var sm = /(?:^#|&)s=([0-9a-f]{32})(?:&|$)/.exec(location.hash || "");
   if (sm) { SHR = sm[1]; try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {  } }
-  if (m) { X = m[1]; lsSet("phx", X); try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {  } }
-  else if (cx) { X = cx; lsSet("phx", X); }
-  else X = XRE.test(lsGet("phx")) ? lsGet("phx") : "";
+  var rx = XRE.test(lsGet("phx")) ? lsGet("phx") : "";
+  if (m) { try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {  } }
+  if (cx) { X = cx; lsSet("phx", X); }
+  else if (m && (m[1] === rx || window.confirm("這條連結要連到後端（…" + m[1].slice(-6) + "）" + (rx ? "，跟這台原本連的（…" + rx.slice(-6) + "）不一樣" : "") + "。\n只有開發者給你的正式連結才按「確定」；不確定請按「取消」。"))) { X = m[1]; lsSet("phx", X); }
+  else X = rx;
   DK = TRE.test(lsGet("phdk")) ? lsGet("phdk") : rnd32(); lsSet("phdk", DK);
-  T = TRE.test(ssGet("pht")) ? ssGet("pht") : "";
+  T = TRE.test(ssGet("pht")) && ssGet("phtx") === X ? ssGet("pht") : "";
 })();
 
 function post(fn, a, ms) {
@@ -148,7 +150,7 @@ function scrCode(sec) {
 }
 
 function enter(r) {
-  T = r.t; ssSet("pht", T); ME = r.me || {}; IDLE_MIN = r.idle || 30; LAST = Date.now(); PING = Date.now();
+  T = r.t; ssSet("pht", T); ssSet("phtx", X); ME = r.me || {}; IDLE_MIN = r.idle || 30; LAST = Date.now(); PING = Date.now();
   main();
 }
 function main() {
