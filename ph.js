@@ -496,15 +496,10 @@ function ceFields(st, o) {
   return out;
 }
 function isDev() { return !!Q.dev; }
-function mayEdit() { return !!(Q.dev || Q.may); }
+function mayEdit() { return !!Q.may; }
 function mkey(d) { return d.getFullYear() + "-" + (d.getMonth() + 1); }
-function lockAt(key) {
-  var c = Q.cfg || {}, L = (c.lock || {})[key] || {}, p = key.split("-");
-  if (L.at) return new Date(L.at);
-  if (c.autoDay) return new Date(+p[0], +p[1], c.autoDay, 0, 0);
-  return null;
-}
-function isLocked(key) { var L = ((Q.cfg || {}).lock || {})[key] || {}; if (L.st === "lock") return true; if (L.st === "open") return false; var t = lockAt(key); return !!(t && new Date() >= t); }
+function lockAt() { return null; }
+function isLocked(key) { var L = ((Q.cfg || {}).lock || {})[key] || {}; return L.st === "lock"; }
 function canEdit(rec) { return mayEdit() && !isLocked(mkey(rec.at)); }
 
 function api(act, a, b) {
@@ -1029,6 +1024,7 @@ function saveEdit(E, rec, data) {
 }
 var A4 = { w: 1240, h: 1754 };
 function loadImg(src) { return new Promise(function (ok) { if (!src) { ok(null); return; } var im = new Image(); im.onload = function () { ok(im); }; im.onerror = function () { ok(null); }; im.src = src; }); }
+function wrapLines(g, t, w) { var out = [], line = ""; Array.from(String(t || "")).forEach(function (ch) { if (line && g.measureText(line + ch).width > w) { out.push(line); line = ch; } else line += ch; }); if (line) out.push(line); return out; }
 function drawForm(rec, prev) {
   var T = TF(rec.form), C = SITES[rec.site], cv = document.createElement("canvas"); cv.width = A4.w; cv.height = A4.h;
   var g = cv.getContext("2d"), F = "'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif";
@@ -1059,27 +1055,56 @@ function drawForm(rec, prev) {
     if (T.memo) { g.textAlign = "left"; g.font = "800 23px " + F; wrap(IT[0], xs[G[0]] + 12, y + 26, xs[G[1]] - xs[G[0]] - 24, 36); wrap(IT[1], xs[G[1]] + 12, y + 26, xs[G[2]] - xs[G[1]] - 24, 36); }
     else { g.textAlign = "center"; fitText(g, IT[0], (xs[G[0]] + xs[G[1]]) / 2, y + HH / 2, xs[G[1]] - xs[G[0]] - 20, 28, "900", F); fitText(g, IT[1], (xs[G[1]] + xs[G[2]]) / 2, y + HH / 2, xs[G[2]] - xs[G[1]] - 20, 28, "900", F); }
     y += HH;
-    var idx = 0, VAL = function (d, col) {
+    var VAL = function (d, col) {
       if (/^[ab][+-]$/.test(col)) { var on = d[col[0]] === (col[1] === "+" ? "ok" : "ng"); return on ? ["✔", col[1] === "+" ? "#15803D" : "#B91C1C"] : [""]; }
-      if (col === "am" || col === "bm") return [d[col] || "", "#B91C1C"];
       return [d[col] || ""];
     };
-    for (var sct = 0; sct < T.secs(C); sct++) {
-      g.lineWidth = 3; g.beginPath(); g.moveTo(L, y); g.lineTo(Rr, y); g.stroke(); g.lineWidth = 1.5;
-      g.font = "800 " + Math.min(T.memo ? 20 : 24, hh * .5) + "px " + F; g.textAlign = "center"; g.fillStyle = "#111";
-      T.heads.forEach(function (t, k) { g.fillText(t, (xs[k] + xs[k + 1]) / 2, y + hh / 2); });
-      g.strokeRect(L, y, tw, hh); xs.slice(1, -1).forEach(function (x) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + hh); g.stroke(); });
+    var avail = A4.h - 80 - y, nS = T.secs(C), nR = T.rows(C), DATA = [], base = Math.min(T.memo ? 19 : 22, hh * .46);
+    var fit = function (t, w, h, minF) {
+      for (var f = Math.floor(base); f >= minF; f--) { g.font = f + "px " + F; var ls = wrapLines(g, t, w); if (ls.length * f * 1.25 + 8 <= h) return { f: f, ls: ls, h: h }; }
+      g.font = minF + "px " + F; var l2 = wrapLines(g, t, w); return { f: minF, ls: l2, h: Math.ceil(l2.length * minF * 1.25 + 10) };
+    };
+    for (var q = 0; q < nS * nR; q++) {
+      var d0 = rec.rows[q] || {}, mm = {}, rh0 = hh;
+      T.cols.forEach(function (col, k) { if ((col === "am" || col === "bm") && String(d0[col] || "").trim()) { var o = fit(String(d0[col]).replace(/\s+/g, " ").trim(), xs[k + 1] - xs[k] - 12, hh, 15); mm[k] = o; rh0 = Math.max(rh0, o.h); } });
+      DATA.push({ d: d0, mm: mm, h: rh0, big: rh0 > hh });
+    }
+    var tot = function () { return nS * hh + DATA.reduce(function (a, r) { return a + r.h; }, 0); };
+    if (tot() > avail) {
+      var over = tot() - avail, room = DATA.reduce(function (a, r) { return a + (r.big ? 0 : hh - 26); }, 0);
+      if (room > 0) { var cut = Math.min(1, over / room); DATA.forEach(function (r) { if (!r.big) r.h = hh - (hh - 26) * cut; }); }
+    }
+    var total = tot(), sc = total > avail ? avail / total : 1, tg = g, ty0 = y, tc = null;
+    if (sc < 1) { tc = document.createElement("canvas"); tc.width = A4.w; tc.height = Math.ceil(total) + 8; tg = tc.getContext("2d"); tg.fillStyle = "#fff"; tg.fillRect(0, 0, tc.width, tc.height); tg.textBaseline = "middle"; tg.strokeStyle = "#111"; y = 2; }
+    var idx = 0;
+    for (var sct = 0; sct < nS; sct++) {
+      tg.lineWidth = 3; tg.beginPath(); tg.moveTo(L, y); tg.lineTo(Rr, y); tg.stroke(); tg.lineWidth = 1.5;
+      tg.font = "800 " + Math.min(T.memo ? 20 : 24, hh * .5) + "px " + F; tg.textAlign = "center"; tg.fillStyle = "#111";
+      T.heads.forEach(function (t, k) { tg.fillText(t, (xs[k] + xs[k + 1]) / 2, y + hh / 2); });
+      tg.strokeRect(L, y, tw, hh); xs.slice(1, -1).forEach(function (x) { tg.beginPath(); tg.moveTo(x, y); tg.lineTo(x, y + hh); tg.stroke(); });
       y += hh;
-      for (var rr = 0; rr < T.rows(C); rr++) {
-        var d = rec.rows[idx++] || {};
-        g.strokeRect(L, y, tw, hh); xs.slice(1, -1).forEach(function (x) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + hh); g.stroke(); });
-        g.font = Math.min(T.memo ? 19 : 22, hh * .46) + "px " + F; g.fillStyle = "#111"; g.textAlign = "center";
-        var cell = function (k, t, col) { if (!t) return; g.fillStyle = col || "#111"; var w = xs[k + 1] - xs[k] - 10, s = t; while (g.measureText(s).width > w && s.length > 1) s = s.slice(0, -1); g.fillText(s === t ? s : s.slice(0, -1) + "…", (xs[k] + xs[k + 1]) / 2, y + hh / 2); };
-        T.cols.forEach(function (col, k) { var v = VAL(d, col); cell(k, v[0], v[1]); });
-        y += hh;
+      for (var rr = 0; rr < nR; rr++) {
+        var R0 = DATA[idx++], d = R0.d, h = R0.h, fs = Math.min(base, h * .46);
+        tg.strokeRect(L, y, tw, h); xs.slice(1, -1).forEach(function (x) { tg.beginPath(); tg.moveTo(x, y); tg.lineTo(x, y + h); tg.stroke(); });
+        T.cols.forEach(function (col, k) {
+          var mo = R0.mm[k];
+          if (mo) {
+            tg.font = mo.f + "px " + F; tg.fillStyle = "#B91C1C";
+            var lh = mo.f * 1.25, y1 = y + h / 2 - (mo.ls.length - 1) * lh / 2, one = mo.ls.length === 1;
+            tg.textAlign = one ? "center" : "left";
+            mo.ls.forEach(function (t, j) { tg.fillText(t, one ? (xs[k] + xs[k + 1]) / 2 : xs[k] + 6, y1 + j * lh); });
+            return;
+          }
+          var v = VAL(d, col); if (!v[0]) return;
+          tg.font = fs + "px " + F; tg.fillStyle = v[1] || "#111"; tg.textAlign = "center";
+          var w = xs[k + 1] - xs[k] - 10, t = v[0], s2 = t; while (tg.measureText(s2).width > w && s2.length > 1) s2 = s2.slice(0, -1);
+          tg.fillText(s2 === t ? s2 : s2.slice(0, -1) + "…", (xs[k] + xs[k + 1]) / 2, y + h / 2);
+        });
+        y += h;
       }
     }
-    g.lineWidth = 3; g.beginPath(); g.moveTo(L, y); g.lineTo(Rr, y); g.stroke();
+    tg.lineWidth = 3; tg.beginPath(); tg.moveTo(L, y); tg.lineTo(Rr, y); tg.stroke();
+    if (tc) { var th = y + 4, dw = (tw + 4) * sc; g.drawImage(tc, L - 2, 0, tw + 4, th, L - 2 + (tw + 4 - dw) / 2, ty0, dw, th * sc); y = ty0 + th * sc; }
     g.font = "15px " + F; g.fillStyle = "#666"; g.textAlign = "right"; g.fillText("送出：" + fmtAt(rec.at) + "（電子查檢表）", Rr, A4.h - 50);
     var ed = rec.edits || [];
     if (ed.length) { var last = ed[ed.length - 1]; g.fillStyle = "#8A5A00"; g.textAlign = "left"; g.fillText("修改：" + last.who + "　" + fmtAt(last.at) + "（共 " + ed.length + " 次）", L, A4.h - 50); }
@@ -1858,7 +1883,13 @@ function drawPid(rec, prev) {
       sigAt(g, ims[k * 2 + 1], G.cs, G.page, s.csig);
       g.font = "16px " + F; g.fillStyle = "#333"; if (s.csig) { g.fillText(s.csig.who, G.cs.x + G.cs.w + 16, y + 64); g.fillText(s.csig.at, G.cs.x + G.cs.w + 16, y + 88); }
       if (s.tsig) { g.font = "14px " + F; g.fillStyle = "#666"; g.fillText("簽：" + s.tsig.at, L, y + 75); }
-      var ty = y + 108, c1 = L + W * 0.70, c2 = L + W * 0.85, hh = 72, rh = [70, 35, 35, 35, 35, 35, 35];
+      var nt = (s.note || "").trim().replace(/\s+/g, " "), nfit = null, shk = 0;
+      if (nt) {
+        var gap0 = (k % PID_PER_PAGE === PID_PER_PAGE - 1 || k === rec.secs.length - 1) ? 1690 - (y + 460) : 34;
+        for (var sh = 0; sh <= 6 && !nfit; sh++) for (var fz = 17; fz >= 11 && !nfit; fz--) { g.font = fz + "px " + F; var nls = wrapLines(g, "備註：" + nt, W); if (nls.length * fz * 1.2 <= gap0 + sh * 6 - 4) { nfit = { f: fz, ls: nls }; shk = sh; } }
+        if (!nfit) { g.font = "11px " + F; nfit = { f: 11, ls: wrapLines(g, "備註：" + nt, W) }; shk = 6; }
+      }
+      var ty = y + 108, c1 = L + W * 0.70, c2 = L + W * 0.85, hh = 72, rh = [70, 35 - shk, 35 - shk, 35 - shk, 35 - shk, 35 - shk, 35 - shk];
       g.strokeStyle = "#111"; g.lineWidth = 3; g.strokeRect(L, ty, W, hh + rh.reduce(function (a, b) { return a + b; }, 0));
       g.lineWidth = 1.5; g.beginPath(); g.moveTo(c1, ty); g.lineTo(c1, ty + hh + rh.reduce(function (a, b) { return a + b; }, 0)); g.stroke();
       g.font = "800 24px " + F; g.textAlign = "center"; g.fillStyle = "#111"; g.fillText("標準作業流程", (L + c1) / 2, ty + hh / 2); g.fillText("評核", (c1 + Rr) / 2, ty + hh / 4);
@@ -1882,7 +1913,7 @@ function drawPid(rec, prev) {
         yy += h;
       });
       g.fillStyle = "#111"; g.textAlign = "left";
-      if ((s.note || "").trim()) { g.font = "17px " + F; g.fillStyle = "#8A5A00"; var nt = "備註：" + s.note.trim().replace(/\s+/g, " "); while (g.measureText(nt).width > W && nt.length > 4) nt = nt.slice(0, -2); g.fillText(nt, L, yy + 18); }
+      if (nfit) { g.font = nfit.f + "px " + F; g.fillStyle = "#8A5A00"; nfit.ls.forEach(function (t, j) { g.fillText(t, L, yy + 4 + nfit.f * 0.6 + j * nfit.f * 1.2); }); }
     });
     cvs.forEach(function (cv, i) {
       var g = cv.getContext("2d"); g.font = "15px " + F; g.fillStyle = "#666"; g.textAlign = "right"; g.textBaseline = "middle";
@@ -2044,16 +2075,12 @@ function showHist(r) {
 }
 function lockSet(key, L, msg) { api("lock", key, JSON.stringify(L)).then(function (x) { applyCfg(x.cfg); renderArch(); toast(msg); }, function (e) { toast("沒存好：" + errText(e)); }); }
 function lockPanel(y, m) {
-  var key = y + "-" + m, L = (Q.cfg.lock || {})[key] || { st: "", at: "" }, lk = isLocked(key), t = lockAt(key);
+  var key = y + "-" + m, lk = isLocked(key);
   var p = el("div", { class: "lockp" });
   p.appendChild(el("b", { text: lk ? "🔒 " + m + " 月鎖住了（大家只能查閱）" : "🔓 " + m + " 月可以修改（有勾的人）" }));
-  var b1 = el("button", { type: "button", class: "btn lkon", style: "padding:5px 12px", text: "🔒 現在鎖住" }); b1.onclick = function () { lockSet(key, { st: "lock", at: L.at || "" }, "🔒 " + m + " 月鎖住了"); };
-  var b2 = el("button", { type: "button", class: "btn lkoff", style: "padding:5px 12px", text: "🔓 打開（可以再改）" }); b2.onclick = function () { lockSet(key, { st: "open", at: L.at || "" }, "🔓 " + m + " 月打開了"); };
+  var b1 = el("button", { type: "button", class: "btn lkon", style: "padding:5px 12px", text: "🔒 現在鎖住" }); b1.onclick = function () { lockSet(key, { st: "lock", at: "" }, "🔒 " + m + " 月鎖住了"); };
+  var b2 = el("button", { type: "button", class: "btn lkoff", style: "padding:5px 12px", text: "🔓 打開（可以再改）" }); b2.onclick = function () { lockSet(key, { st: "", at: "" }, "🔓 " + m + " 月打開了"); };
   p.appendChild(lk ? b2 : b1);
-  var inp = el("input", { type: "datetime-local", value: L.at || "", "aria-label": "自動鎖住的時間" });
-  var b3 = el("button", { type: "button", class: "btn lkat", style: "padding:5px 12px", text: "⏰ 設定" }); b3.onclick = function () { lockSet(key, { st: "", at: inp.value }, inp.value ? "⏰ " + inp.value.replace("T", " ") + " 自動鎖住" : "不自動鎖住"); };
-  p.appendChild(el("span", { text: "自動鎖住時間：" })); p.appendChild(inp); p.appendChild(b3);
-  p.appendChild(el("span", { class: "note", style: "width:100%", text: L.st === "lock" ? "（開發者按了鎖住）" : L.st === "open" ? "（開發者按了打開：時間到也不會自動鎖）" : t ? "（" + fmtAt(t) + " 自動鎖住" + (L.at ? "" : "：照設定裡的「每個月自動鎖住」") + "）" : "（沒有設定時間：開發者自己按鎖住）" }));
   return p;
 }
 function listLoad(force) {
@@ -2209,22 +2236,17 @@ function renderSet() {
   });
   A.appendChild(fl);
   A.appendChild(el("h3", { text: "可以「編輯修改」送出的查檢表的人" }));
-  A.appendChild(el("div", { class: "note", text: "勾了＝在「📁 查閱」可以按 ✏️ 修改（還沒鎖住的月份）；沒勾＝只能查閱。" + (window.PH_SET ? "主管名單上的人都能填新的。名單＝主管名單＋開發者。" : "核可過的藥師都能填新的。名單＝手冊的核可名單。") }));
+  A.appendChild(el("div", { class: "note", text: "勾了＝在「📁 查閱」可以按 ✏️ 修改（還沒鎖住的月份）；沒勾＝只能查閱（開發者也一樣，要勾才可以修改）。" + (window.PH_SET ? "主管名單上的人都能填新的。名單＝主管名單＋開發者。" : "核可過的藥師都能填新的。名單＝手冊的核可名單。") }));
   var pl = el("div", { class: "plist" });
   if (!Q.people) { pl.appendChild(el("span", { class: "note", text: "⏳ 名單讀取中…" })); api("people").then(function (x) { Q.people = x.people || []; if (Q.tab === "set") renderSet(); }, function (e) { Q.people = []; toast("名單讀不到：" + errText(e)); }); }
   else (Q.people.length ? Q.people : []).forEach(function (p) {
-    var ed = Q.cfg.editors || [], c = el("input", { type: "checkbox", "data-uid": p.uid, "data-emp": p.emp }); c.checked = !!p.dev || ed.indexOf(p.uid) >= 0; c.disabled = !!p.dev;
-    c.onchange = function () { var a = (Q.cfg.editors || []).slice(), i = a.indexOf(p.uid); if (c.checked && i < 0) a.push(p.uid); if (!c.checked && i >= 0) a.splice(i, 1); Q.cfg.editors = a; cfgSave((p.name || p.emp) + (c.checked ? "：可以修改" : "：只能查閱")); };
-    pl.appendChild(el("label", { class: p.dev ? "dev" : "" }, [c, (p.name || "（沒有名字）") + (p.emp ? "（" + p.emp + "）" : "") + (p.dev ? "　開發者（一定可以）" : "")]));
+    var ed = Q.cfg.editors || [], c = el("input", { type: "checkbox", "data-uid": p.uid, "data-emp": p.emp }); c.checked = ed.indexOf(p.uid) >= 0;
+    c.onchange = function () { var a = (Q.cfg.editors || []).slice(), i = a.indexOf(p.uid); if (c.checked && i < 0) a.push(p.uid); if (!c.checked && i >= 0) a.splice(i, 1); Q.cfg.editors = a; if (p.emp && Q.me && Q.me.emp && String(p.emp).toUpperCase() === String(Q.me.emp).toUpperCase()) Q.may = c.checked; cfgSave((p.name || p.emp) + (c.checked ? "：可以修改" : "：只能查閱")); };
+    pl.appendChild(el("label", { class: p.dev ? "dev" : "" }, [c, (p.name || "（沒有名字）") + (p.emp ? "（" + p.emp + "）" : "") + (p.dev ? "　開發者" : "")]));
   });
   if (Q.people && !Q.people.length) pl.appendChild(el("span", { class: "note", text: window.PH_SET ? "主管名單上還沒有人（上面「👥 主管名單」先加）。" : "核可名單上還沒有人。" }));
   A.appendChild(pl);
-  A.appendChild(el("h3", { text: "每個月自動鎖住（過了時間＝只能查閱）" }));
-  var sel = el("select", { id: "qc-autoday", "aria-label": "每個月自動鎖住" });
-  [[0, "不自動：開發者自己按「🔒 鎖住」"], [1, "下個月 1 號 00:00 鎖住"], [3, "下個月 3 號 00:00 鎖住"], [5, "下個月 5 號 00:00 鎖住"], [10, "下個月 10 號 00:00 鎖住"]].forEach(function (o) { sel.appendChild(el("option", { value: String(o[0]), text: o[1] })); });
-  sel.value = String(Q.cfg.autoDay || 0); sel.onchange = function () { Q.cfg.autoDay = +sel.value; cfgSave("存好了"); };
-  A.appendChild(sel);
-  A.appendChild(el("div", { class: "note", style: "margin-top:8px", text: "個別月份：到「📁 查閱」點那個月 → 下面黃色框「🔒 現在鎖住／🔓 打開／⏰ 自動鎖住時間」（個別月份的設定比這裡優先）。" }));
+  A.appendChild(el("div", { class: "note", style: "margin-top:14px", text: "鎖住月份：到「📁 查閱」點那個月 → 下面黃色框「🔒 現在鎖住／🔓 打開」。鎖住了大家都只能查閱。" }));
 }
 function qgo(v) {
   if (v === "set" && !isDev()) v = "fill";
