@@ -469,6 +469,35 @@ function ceFocus() { var x = $(S.ce.emp ? "#qc-cename" : "#qc-ceemp"); if (x) x.
 function bagSigDrop() {
   if (S.sig && S.sig.who !== ceWho()) { S.sig.img = null; S.sig = null; var b = document.querySelector(".qcz .paper:not(.pidp) .signrow .sigbox"); if (b) { b.classList.remove("done"); b.innerHTML = ""; b.appendChild(el("span", { class: "ph", text: "✍️ 點這裡電子簽名" })); } toast("查檢者換了：簽名拿掉了，請重新簽"); }
 }
+function ekey(v) { var e = String(v || "").replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }).replace(/[\s　]+/g, "").toUpperCase(); if (/^\d+$/.test(e)) e = e.replace(/^0+(?=\d)/, ""); return e; }
+function whoMapLoad() {
+  if (Q.whoMap) return Promise.resolve(Q.whoMap);
+  if (Q.whoMapP) return Q.whoMapP;
+  Q.whoMapP = api("whomap").then(function (x) { Q.whoMap = x.map && typeof x.map === "object" ? x.map : {}; return Q.whoMap; }, function () { Q.whoMapP = null; return null; });
+  return Q.whoMapP;
+}
+function nameAuto(o) {
+  var t = null;
+  return function (now) {
+    var e = o.emp(); clearTimeout(t);
+    if (!e) { if (o.name()) o.set(""); o.setAuto(""); return; }
+    if (o.name() && o.name() !== o.auto()) return;
+    var k = ekey(e), fill = function (n) {
+      if (o.emp() !== e || (o.name() && o.name() !== o.auto())) return;
+      if (n) { if (o.name() !== n) o.set(n); o.setAuto(n); }
+      else if (o.auto() && o.name() === o.auto()) { o.set(""); o.setAuto(""); }
+    };
+    if (Q.whoMap && Object.prototype.hasOwnProperty.call(Q.whoMap, k)) { fill(Q.whoMap[k]); return; }
+    if (Q.whoC[k] !== undefined) { fill(Q.whoC[k]); return; }
+    if (Q.whoMap && !now) { fill(""); return; }
+    if (e.length < 2 && !now) return;
+    t = setTimeout(function () { api("who", e).then(function (x) { Q.whoC[k] = x.name || ""; if (x.name && Q.whoMap) Q.whoMap[k] = x.name; fill(Q.whoC[k]); }, function () {  }); }, now ? 0 : 250);
+  };
+}
+function empEnter(emp, run, next) {
+  emp.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); run(true); if (next) next.focus(); } });
+  emp.addEventListener("blur", function () { run(true); });
+}
 function ceFields(st, o) {
   st = st || S.ce; o = o || { id: 1, kp: "⌨ 查檢者 員工編號：", drop: bagSigDrop };
   var ro = !!S.edit, auto = st.auto && st.auto === st.name ? st.name : "";
@@ -480,15 +509,9 @@ function ceFields(st, o) {
   var out = [bE, bN];
   if (ro) return out;
   var changed = function () { o.drop(st); };
-  var autoName = function () {
-    var e = st.emp, fill = function (n) { if (st.emp !== e || (st.name && st.name !== auto)) return; if (n) { st.name = n; nm.value = n; auto = n; } else if (auto && st.name === auto) { st.name = ""; nm.value = ""; auto = ""; } st.auto = auto; upd(); changed(); };
-    if (!e || e.length < 2 || (st.name && st.name !== auto)) return;
-    clearTimeout(autoName.t);
-    autoName.t = setTimeout(function () {
-      if (Q.whoC[e] !== undefined) { fill(Q.whoC[e]); return; }
-      api("who", e).then(function (x) { Q.whoC[e] = x.name || ""; fill(Q.whoC[e]); }, function () {  });
-    }, 350);
-  };
+  var autoName = nameAuto({ emp: function () { return st.emp; }, name: function () { return st.name; }, auto: function () { return auto; }, setAuto: function (a) { auto = a; st.auto = a; },
+    set: function (n) { st.name = n; nm.value = n; upd(); changed(); } });
+  empEnter(emp, autoName, nm);
   var en = forceKeys(emp, codeChar, 12, st.emp, function (v) { st.emp = v; upd(); changed(); autoName(); });
   emp.oninput = function () { if (en.comp()) return; var v = emp.value.replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }).toUpperCase().replace(/[^A-Z0-9\-]/g, ""); if (v !== emp.value) emp.value = v; st.emp = v; en.sync(v); upd(); changed(); autoName(); };
   nm.oninput = function () { st.name = nm.value.trim(); auto = ""; st.auto = ""; upd(); changed(); };
@@ -1725,15 +1748,9 @@ function pidSec(s, k) {
   var en = forceKeys(emp, codeChar, 12, s.emp, function (v) { s.emp = v; autoName(); });
   if (!Q.autoNm) Q.autoNm = {};
   var auto = Q.autoNm[k] && Q.autoNm[k] === s.name ? s.name : "";
-  var autoName = function () {
-    var e = s.emp, mine = s.name && s.name !== auto, fill = function (n) { if (s.emp !== e || (s.name && s.name !== auto)) return; if (n) { s.name = n; nm.value = n; auto = n; } else if (auto && s.name === auto) { s.name = ""; nm.value = ""; auto = ""; } Q.autoNm[k] = auto; };
-    if (!e || e.length < 2 || mine) return;
-    clearTimeout(autoName.t);
-    autoName.t = setTimeout(function () {
-      if (Q.whoC[e] !== undefined) { fill(Q.whoC[e]); return; }
-      api("who", e).then(function (x) { Q.whoC[e] = x.name || ""; fill(Q.whoC[e]); }, function () {  });
-    }, 350);
-  };
+  var autoName = nameAuto({ emp: function () { return s.emp; }, name: function () { return s.name; }, auto: function () { return auto; }, setAuto: function (a) { auto = a; Q.autoNm[k] = a; },
+    set: function (n) { s.name = n; nm.value = n; } });
+  empEnter(emp, autoName, nm);
   emp.oninput = function () { if (en.comp()) return; var v = emp.value.replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }).toUpperCase().replace(/[^A-Z0-9\-]/g, ""); if (v !== emp.value) emp.value = v; s.emp = v; en.sync(v); autoName(); };
   nm.oninput = function () { s.name = nm.value.trim(); auto = ""; Q.autoNm[k] = ""; };
   if (TOUCH) { emp.addEventListener("focus", function () { kpOpen(emp, null, 0, { title: "⌨ 第 " + (k + 1) + " 段 查檢對象 員工編號：", letters: true, sym: "-", max: 12, next: nm, nextLabel: "下一格（名字）" }); }); emp.addEventListener("blur", function () { setTimeout(function () { if (KP && KP.inp === emp && document.activeElement !== emp) kpClose(); }, 0); }); }
@@ -2337,6 +2354,7 @@ function boot(force) {
     Q.none = false; Q.may = !!x.may; Q.drafts = x.drafts || {}; Q.folder = x.folder;
     $("#qc-tabs").style.display = ""; $("#qc-site").style.display = ""; $("#qc-vfill .bar").style.display = "";
     applyCfg(x.cfg); wire(); renderFormBtns(); renderSiteBtns(); qgo(Q.tab || "fill"); render();
+    whoMapLoad();
   }, function (e) {
     Q.busy = false; Q.err = errText(e);
     var P2 = $("#qc-paper"); if (P2) { P2.innerHTML = ""; P2.appendChild(el("p", { class: "bad", text: "⚠️ " + Q.err })); P2.appendChild(el("button", { type: "button", class: "btn", text: "🔄 再試一次", onclick: function () { boot(true); } })); }
