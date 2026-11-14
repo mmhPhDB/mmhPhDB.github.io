@@ -499,7 +499,7 @@ function isDev() { return !!Q.dev; }
 function mayEdit() { return !!Q.may; }
 function mkey(d) { return d.getFullYear() + "-" + (d.getMonth() + 1); }
 function lockAt() { return null; }
-function isLocked(key) { var L = ((Q.cfg || {}).lock || {})[key] || {}; return L.st === "lock"; }
+function isLocked() { return false; }
 function canEdit(rec) { return mayEdit() && !isLocked(mkey(rec.at)); }
 
 function api(act, a, b) {
@@ -520,6 +520,33 @@ function pdfJpegs(u8) {
   var re = /\/Filter \/DCTDecode \/Length (\d+) >>\nstream\n/g, m;
   while ((m = re.exec(bin))) { var st = m.index + m[0].length, n = +m[1]; out.push("data:image/jpeg;base64," + btoa(bin.substr(st, n))); re.lastIndex = st + n; }
   return out;
+}
+// 使用者說「為什麼（舊的 PDF）沒有改變」：開發者可以用現在的排法重做 PDF（內容、修改紀錄都不變；舊的 PDF 搬到「舊版」資料匣）
+function redoOne(r) {
+  var E = r;
+  return fetchPdf(E).then(function () {
+    var rec = { id: E.id, form: E.form || "bag", site: E.site, at: E.at, edits: E.edits || [] };
+    if (rec.form === "pid") rec.secs = cloneSecs(E.secs);
+    else { rec.rows = JSON.parse(JSON.stringify(E.rows || [])); rec.sig = E.sig; rec.ce = ceOf(E.sig); }
+    rec.keep = (E.pngs || []).slice(rec.form === "pid" ? 2 : 1);
+    return makePdf(rec, rec.form === "pid" ? E.pngs : E.png).then(function () { return toB64(rec.pdf); }).then(function (b64) {
+      return api("redo", E.id, b64).then(function (x) { E.pdf = rec.pdf; E.pngs = rec.pngs; E.png = rec.png; E.file = x.file || E.file; return E; });
+    });
+  });
+}
+function redoPdfs(list) {
+  var i = 0, ok = 0, bad = [];
+  var next = function () {
+    if (i >= list.length) {
+      toast("🔄 PDF 重做好了：" + ok + " 份" + (bad.length ? "；沒成功 " + bad.length + " 份（" + bad[0] + "）" : ""));
+      if (Q.tab === "arch") renderArch();
+      return;
+    }
+    var r = list[i++];
+    toast("⏳ PDF 重做中… " + i + "／" + list.length);
+    redoOne(r).then(function () { ok++; next(); }, function (e) { bad.push(errText(e)); next(); });
+  };
+  next();
 }
 function fetchPdf(r, ver) {
   if (ver === undefined && r.pdf && r.pngs) return Promise.resolve(r);
@@ -1188,15 +1215,15 @@ function save(blob, name) {
 }
 var YN = { ok: "符合", ng: "不符" };
 function yearXlsx(y) {
-  var list = yearRecs(y), sd = [["月份", "送出時間", "院區", "查檢者", "第幾列", "日期", "領藥號", "醫師簽章", "藥師簽章", "修改紀錄"]], st = [["月份", "份數", "藥袋（份）", "病人辨識（份）", "處方簽章（份）", "填的列數／段數", "不符（筆）", "有不符的份數", "不符率", "鎖住了嗎"]], pd = [["月份", "送出時間", "院區", "第幾段", "查檢對象員工編號", "查檢對象", "日期", "上／下午", "查檢者"].concat(PID_ITEMS.map(function (t, j) { return "第 " + (j + 1) + " 項"; }), ["備註", "修改紀錄"])], det = [["月份", "送出時間", "院區", "查檢者", "第幾列", "日期", "領藥號", "筆數", "藥袋列印品質", "不符事項", "藥袋調劑品質", "不符事項", "修改紀錄"]];
+  var list = yearRecs(y), sd = [["月份", "送出時間", "院區", "查檢者", "第幾列", "日期", "領藥號", "醫師簽章", "藥師簽章", "修改紀錄"]], st = [["月份", "份數", "藥袋（份）", "病人辨識（份）", "處方簽章（份）", "填的列數／段數", "不符（筆）", "有不符的份數", "不符率"]], pd = [["月份", "送出時間", "院區", "第幾段", "查檢對象員工編號", "查檢對象", "日期", "上／下午", "查檢者"].concat(PID_ITEMS.map(function (t, j) { return "第 " + (j + 1) + " 項"; }), ["備註", "修改紀錄"])], det = [["月份", "送出時間", "院區", "查檢者", "第幾列", "日期", "領藥號", "筆數", "藥袋列印品質", "不符事項", "藥袋調劑品質", "不符事項", "修改紀錄"]];
   var tot = [0, 0, 0, 0, 0, 0, 0];
   for (var m = 1; m <= 12; m++) {
     var L = list.filter(function (r) { return r.at.getMonth() + 1 === m; }), used = 0, ng = 0, ngf = 0, nb = 0, np = 0, ns = 0;
     L.forEach(function (r) { used += r.used; ng += r.ng; if (r.ng) ngf++; if (r.form === "pid") np++; else if (r.form === "sig") ns++; else nb++; });
     tot[0] += L.length; tot[1] += used; tot[2] += ng; tot[3] += ngf; tot[4] += nb; tot[5] += np; tot[6] += ns;
-    st.push([m + " 月", L.length, nb, np, ns, used, ng ? { v: ng, s: 2 } : 0, ngf, used ? Math.round(ng / used * 1000) / 10 + "%" : "—", !L.length ? "—" : isLocked(y + "-" + m) ? "🔒 鎖住" : "可以改"]);
+    st.push([m + " 月", L.length, nb, np, ns, used, ng ? { v: ng, s: 2 } : 0, ngf, used ? Math.round(ng / used * 1000) / 10 + "%" : "—"]);
   }
-  st.push([{ v: "全年", s: 1 }, { v: tot[0], s: 1 }, { v: tot[4], s: 1 }, { v: tot[5], s: 1 }, { v: tot[6], s: 1 }, { v: tot[1], s: 1 }, { v: tot[2], s: tot[2] ? 2 : 1 }, { v: tot[3], s: 1 }, { v: tot[1] ? Math.round(tot[2] / tot[1] * 1000) / 10 + "%" : "—", s: 1 }, ""]);
+  st.push([{ v: "全年", s: 1 }, { v: tot[0], s: 1 }, { v: tot[4], s: 1 }, { v: tot[5], s: 1 }, { v: tot[6], s: 1 }, { v: tot[1], s: 1 }, { v: tot[2], s: tot[2] ? 2 : 1 }, { v: tot[3], s: 1 }, { v: tot[1] ? Math.round(tot[2] / tot[1] * 1000) / 10 + "%" : "—", s: 1 }]);
   list.forEach(function (r) {
     var eds = (r.edits || []).map(function (e) { return e.who + " " + fmtAt(e.at); }).join("；");
     if (r.form === "pid") {
@@ -1215,7 +1242,7 @@ function yearXlsx(y) {
       det.push([(r.at.getMonth() + 1) + " 月", fmtAt(r.at), (SITES[r.site] || { name: r.site }).name, r.sig ? r.sig.who : "", i + 1, d.d, d.no, d.n === "" ? "" : +d.n, d.a === "ng" ? { v: "不符", s: 2 } : YN[d.a] || "", d.am, d.b === "ng" ? { v: "不符", s: 2 } : YN[d.b] || "", d.bm, eds]);
     });
   });
-  save(xlsx([{ name: "每月統計", cols: [10, 8, 10, 13, 13, 13, 10, 13, 9, 11], rows: st }, { name: "藥袋明細", cols: [8, 17, 10, 17, 8, 12, 11, 6, 13, 24, 13, 24, 30], rows: det, filter: true }, { name: "病人辨識明細", cols: [8, 17, 10, 7, 14, 10, 12, 8, 17, 8, 8, 8, 8, 8, 8, 8, 28, 30], rows: pd, filter: true }, { name: "處方簽章明細", cols: [8, 17, 10, 17, 8, 12, 11, 11, 11, 30], rows: sd, filter: true }]), "qc-" + y + "-" + rid() + ".xlsx");
+  save(xlsx([{ name: "每月統計", cols: [10, 8, 10, 13, 13, 13, 10, 13, 9], rows: st }, { name: "藥袋明細", cols: [8, 17, 10, 17, 8, 12, 11, 6, 13, 24, 13, 24, 30], rows: det, filter: true }, { name: "病人辨識明細", cols: [8, 17, 10, 7, 14, 10, 12, 8, 17, 8, 8, 8, 8, 8, 8, 8, 28, 30], rows: pd, filter: true }, { name: "處方簽章明細", cols: [8, 17, 10, 17, 8, 12, 11, 11, 11, 30], rows: sd, filter: true }]), "qc-" + y + "-" + rid() + ".xlsx");
   toast("⬇ 整年 Excel：藥袋 " + (det.length - 1) + " 筆、病人辨識 " + (pd.length - 1) + " 段、處方簽章 " + (sd.length - 1) + " 列");
 }
 function monthRecs(y, m) { return yearRecs(y).filter(function (r) { return r.at.getMonth() + 1 === +m; }); }
@@ -2103,7 +2130,7 @@ function listLoad(force) {
 function renderArch() {
   var A = $("#qc-arch"); if (!A) return; A.innerHTML = "";
   A.appendChild(el("h2", {}, ["📁 查閱：送出的查檢表（PDF）", el("button", { type: "button", class: "btn rld", style: "margin-left:10px;padding:4px 10px;font-size:13px", onclick: function () { Q.err = ""; Q.list = null; renderArch(); } }, ["🔄 重新整理"])]));
-  A.appendChild(el("div", { class: "note", text: "按年、按月排；月份下面紅字＝那個月有「不符」，🔒＝鎖住了（只能查閱）。點一個月份＝列出那個月的每一份。你現在是：" + me() + (isDev() ? "（開發者）" : mayEdit() ? "（可以修改）" : "（只能查閱）") + "。" }));
+  A.appendChild(el("div", { class: "note", text: "按年、按月排；月份下面紅字＝那個月有「不符」。點一個月份＝列出那個月的每一份。你現在是：" + me() + (isDev() ? "（開發者）" : mayEdit() ? "（可以修改）" : "（只能查閱）") + "。" }));
   if (!Q.list) { A.appendChild(el("p", { class: "note", text: Q.err ? "⚠️ " + Q.err : "⏳ 讀取中…" })); listLoad(); return; }
   var ARCH = Q.list;
   var fcs = el("div", { class: "fchips", role: "group", "aria-label": "表單" }, [["", "全部"]].concat(FCFG.map(function (c) { return [c.id, fNode(c.id)]; })).map(function (o) { var b = el("button", { type: "button", "data-ff": o[0], class: FF === o[0] ? "on" : "" }, [o[1]]); b.onclick = function () { FF = o[0]; renderArch(); }; return b; }));
@@ -2134,16 +2161,17 @@ function renderArch() {
         if (canEdit(r)) { var e1 = el("button", { type: "button", class: "btn redit", text: "✏️ 修改" }); e1.onclick = function () { startEdit(r); }; act.push(e1); }
         else act.push(el("span", { class: "ro", text: mlk ? "🔒 鎖住了：只能查閱" : "只能查閱（沒有修改權限）" }));
         if (isDev() && r.hn) { var hb = el("button", { type: "button", class: "btn rhist", text: "🕘 舊版（" + r.hn + "）" }); hb.onclick = function () { showHist(r); }; act.push(hb); }
+        if (isDev()) { var rd = el("button", { type: "button", class: "btn rredo", title: "用現在的排法重新產生這一份的 PDF（內容不變、不算修改）", text: "🔄 重做 PDF" }); rd.onclick = function () { rd.disabled = true; redoPdfs([r]); }; act.push(rd); }
         var eds = r.edits || [], last = eds[eds.length - 1];
         rl.appendChild(el("div", { class: "ritem" }, [el("div", { class: "t" }, [el("b", {}, [fmtAt(r.at) + "　" + (SITES[r.site] || { name: "（院區）" }).name, el("span", { class: "ftag" + (r.form === "pid" ? " pid" : r.form === "sig" ? " sig" : "") }, [fNode(r.form || "bag")])]), el("small", { text: "查檢者：" + recWho(r) + "　填了 " + r.used + (r.form === "pid" ? " 段" : " 列") })])].concat(act, [eds.length ? el("div", { class: "ed", text: "✏️ 改過 " + eds.length + " 次（最後：" + last.who + "　" + fmtAt(last.at) + "）" }) : null, ngs.length ? el("div", { class: "ngt", text: "⚠ " + ngs.join("　") }) : null])));
       });
       var pAll = el("button", { type: "button", class: "btn mprint", style: "margin-left:10px;padding:5px 12px;font-size:14px", text: "🖨 這個月全部列印（" + items.length + " 份）" }); pAll.onclick = (function (it) { return function () { printRecs(it); }; })(items);
       var sumK = y + "-" + mm, sumB = el("button", { type: "button", class: "btn msumbtn" + (MSUM === sumK ? " on" : ""), style: "margin-left:10px;padding:5px 12px;font-size:14px", text: MSUM === sumK ? "📊 收起彙整" : "📊 這個月彙整" });
       sumB.onclick = (function (k) { return function () { MSUM = MSUM === k ? "" : k; renderArch(); if (MSUM) { var bx = $("#qc-msum"); if (bx) try { bx.scrollIntoView({ block: "start", behavior: "smooth" }); } catch (e) {  } } }; })(sumK);
-      A.appendChild(el("div", { class: "yr", style: "font-size:15px" }, [y + " 年 " + mm + " 月：" + items.length + " 份", pAll, sumB]));
+      var rdAll = isDev() ? el("button", { type: "button", class: "btn mredo", style: "margin-left:10px;padding:5px 12px;font-size:14px", title: "用現在的排法重新產生這個月每一份的 PDF（內容不變、不算修改）", text: "🔄 這個月 PDF 全部重做（" + items.length + " 份）" }) : null;
+      if (rdAll) rdAll.onclick = (function (it) { return function () { rdAll.disabled = true; redoPdfs(it); }; })(items);
+      A.appendChild(el("div", { class: "yr", style: "font-size:15px" }, [y + " 年 " + mm + " 月：" + items.length + " 份", pAll, sumB, rdAll]));
       if (MSUM === sumK) A.appendChild(msumView(+y, mm));
-      if (isDev()) A.appendChild(lockPanel(y, mm));
-      else if (!mlk && mayEdit() && lockAt(y + "-" + mm)) A.appendChild(el("div", { class: "note", text: "⏰ " + fmtAt(lockAt(y + "-" + mm)) + " 以後鎖住（只能查閱）" }));
       A.appendChild(rl);
     }
   });
@@ -2248,7 +2276,7 @@ function renderSet() {
   });
   A.appendChild(fl);
   A.appendChild(el("h3", { text: "可以「編輯修改」送出的查檢表的人" }));
-  A.appendChild(el("div", { class: "note", text: "勾了＝在「📁 查閱」可以按 ✏️ 修改（還沒鎖住的月份）；沒勾＝只能查閱（開發者也一樣，要勾才可以修改）。" + (window.PH_SET ? "主管名單上的人都能填新的。名單＝主管名單＋開發者。" : "核可過的藥師都能填新的。名單＝手冊的核可名單。") }));
+  A.appendChild(el("div", { class: "note", text: "勾了＝在「📁 查閱」可以按 ✏️ 修改；沒勾＝只能查閱（開發者也一樣，要勾才可以修改）。" + (window.PH_SET ? "主管名單上的人都能填新的。名單＝主管名單＋開發者。" : "核可過的藥師都能填新的。名單＝手冊的核可名單。") }));
   var pl = el("div", { class: "plist" });
   if (!Q.people) { pl.appendChild(el("span", { class: "note", text: "⏳ 名單讀取中…" })); api("people").then(function (x) { Q.people = x.people || []; if (Q.tab === "set") renderSet(); }, function (e) { Q.people = []; toast("名單讀不到：" + errText(e)); }); }
   else (Q.people.length ? Q.people : []).forEach(function (p) {
@@ -2258,7 +2286,6 @@ function renderSet() {
   });
   if (Q.people && !Q.people.length) pl.appendChild(el("span", { class: "note", text: window.PH_SET ? "主管名單上還沒有人（上面「👥 主管名單」先加）。" : "核可名單上還沒有人。" }));
   A.appendChild(pl);
-  A.appendChild(el("div", { class: "note", style: "margin-top:14px", text: "鎖住月份：到「📁 查閱」點那個月 → 下面黃色框「🔒 現在鎖住／🔓 打開」。鎖住了大家都只能查閱。" }));
 }
 function qgo(v) {
   if (v === "set" && !isDev()) v = "fill";
