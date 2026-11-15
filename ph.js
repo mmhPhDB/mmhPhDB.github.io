@@ -147,8 +147,7 @@ function scrCode(sec) {
   card(title("🔐 LINE 驗證碼（每次登入都要）").concat([
     h("p", { class: "ph-sub2", text: "驗證碼已經傳到你的 LINE「藥戰手冊」（5 分鐘內有效）" }),
     h("label", { class: "ph-lb", text: "驗證碼（LINE 上按「📋 複製驗證碼」，在這裡貼上）" }), a,
-    ok, back, m,
-    h("p", { class: "ph-note" }, ["驗證碼前面是注音亂碼（切英文直接照打，例如 su3cl3），後面是英數；中間的空格可以不打。英文大小寫要一樣（0、O、o 算一樣，1、l、I 算一樣）。打完按「確認」或 Enter；在 LINE 按「📋 複製驗證碼」貼上會自動確認。", h("br"), "沒收到：確認 LINE「藥戰手冊」的通知有打開；等一下按「← 回登入」再試。", h("br"), "驗證碼不要給任何人看。"])
+    ok, back, m
   ]), "code");
   try { a.focus(); } catch (e) {  }
 }
