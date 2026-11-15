@@ -120,21 +120,21 @@ function scrLogin(why) {
 }
 
 function scrCode(sec) {
-  var a = h("input", { class: "ph-in ph-box ph-code1", inputmode: "text", maxlength: "14", autocomplete: "one-time-code", autocapitalize: "off", autocorrect: "off", spellcheck: "false", "aria-label": "LINE 驗證碼" });
+  var a = h("input", { class: "ph-in ph-box ph-code1", inputmode: "text", maxlength: "24", placeholder: "例：su3cl3 Kp7Q", autocomplete: "one-time-code", autocapitalize: "off", autocorrect: "off", spellcheck: "false", "aria-label": "LINE 驗證碼" });
   var m = msgEl(), busy = false;
-  var cl = function (v) { return String(v || "").replace(/[！-～]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 65248); }).replace(/[^A-Za-z0-9\u3105-\u312F]/g, "").slice(0, 10); };
-  var done = function (v) { return v.length === 10 || /^\d{6}$/.test(v); };
+  var cl = function (v) { return String(v || "").replace(/[！-～]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 65248); }).replace(/。/g, ".").replace(/、/g, ",").replace(/[^A-Za-z0-9,.\/;\-\u3105-\u312F]/g, "").slice(0, 20); };
+  var done = function (v) { return v.length >= 6; };
   var comp = false;
   a.addEventListener("compositionstart", function () { comp = true; });
   a.addEventListener("compositionend", function () { comp = false; setTimeout(function () { a.oninput(); }, 0); });
-  a.oninput = function (ev) { if (comp || (ev && ev.isComposing)) return; var v = cl(a.value); if (a.value.replace(/\s/g, "") !== v) a.value = v; if (done(v)) ok.onclick(); };
+  a.oninput = function (ev) { if (comp || (ev && ev.isComposing)) return; var v = cl(a.value), t = a.value.replace(/[^A-Za-z0-9,.\/;\-\u3105-\u312F 。、]/g, "").replace(/ {2,}/g, " "); if (t !== a.value) a.value = t; if (/^\d{6}$/.test(v)) ok.onclick(); };
   a.onkeydown = function (ev) { if (ev.key === "Enter") ok.onclick(); };
-  a.onpaste = function (ev) { var t = (ev.clipboardData || window.clipboardData).getData("text"); if (/[A-Za-z0-9]/.test(t)) { ev.preventDefault(); a.value = cl(t); a.oninput(); } };
+  a.onpaste = function (ev) { var t = (ev.clipboardData || window.clipboardData).getData("text"); if (/[A-Za-z0-9]/.test(t)) { ev.preventDefault(); a.value = cl(t); if (done(a.value)) ok.onclick(); } };
   var ok = h("button", { type: "button", class: "ph-btn pri", id: "ph-codego", text: "確認" });
   ok.onclick = function () {
     if (busy) return;
     var v = cl(a.value);
-    if (!done(v)) { m.textContent = "驗證碼是 LINE 卡片上的 10 個字（注音＋英數）"; return; }
+    if (!done(v)) { m.textContent = "請打 LINE 卡片上的驗證碼（例如 su3cl3 Kp7Q）"; return; }
     busy = true; ok.disabled = true; m.textContent = "⏳ 確認中…";
     call("phCode", [sec, v]).then(function (r) {
       busy = false; ok.disabled = false;
@@ -148,7 +148,7 @@ function scrCode(sec) {
     h("p", { class: "ph-sub2", text: "驗證碼已經傳到你的 LINE「藥戰手冊」（5 分鐘內有效）" }),
     h("label", { class: "ph-lb", text: "驗證碼（LINE 上按「📋 複製驗證碼」，在這裡貼上）" }), a,
     ok, back, m,
-    h("p", { class: "ph-note" }, ["驗證碼有注音和英數：最快是在 LINE 按「📋 複製驗證碼」再貼到這裡。英文大小寫要一樣（0、O、o 算一樣，1、l、I 算一樣）。", h("br"), "沒收到：確認 LINE「藥戰手冊」的通知有打開；等一下按「← 回登入」再試。", h("br"), "驗證碼不要給任何人看。"])
+    h("p", { class: "ph-note" }, ["驗證碼前面是注音亂碼（切英文直接照打，例如 su3cl3），後面是英數；中間的空格可以不打。英文大小寫要一樣（0、O、o 算一樣，1、l、I 算一樣）。打完按「確認」或 Enter；在 LINE 按「📋 複製驗證碼」貼上會自動確認。", h("br"), "沒收到：確認 LINE「藥戰手冊」的通知有打開；等一下按「← 回登入」再試。", h("br"), "驗證碼不要給任何人看。"])
   ]), "code");
   try { a.focus(); } catch (e) {  }
 }
