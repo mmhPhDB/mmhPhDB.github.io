@@ -1,3 +1,2 @@
 User-agent: *
-Allow: /ph-logo.png
 Disallow: /
