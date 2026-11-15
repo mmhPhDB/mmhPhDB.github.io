@@ -1,5 +1,5 @@
 "use strict";
-var PHV = "1.1（第 76 批）";
+var PHV = "1.2（第 77 批・資安）";
 var XRE = /^[A-Za-z0-9_-]{20,120}$/, TRE = /^[0-9a-f]{32}$/;
 var X = "", T = "", DK = "", SHR = "", ME = null, IDLE_MIN = 30, LAST = Date.now(), PING = 0, IDT = 0;
 var APP = null;
@@ -31,11 +31,13 @@ function xdec(c) {
   try { if (!cx && typeof window.PH_XC === "string") cx = xdec(window.PH_XC); if (!cx && typeof window.PH_X === "string" && XRE.test(window.PH_X)) cx = window.PH_X; } catch (e) {  }
   var sm = /(?:^#|&)s=([0-9a-f]{32})(?:&|$)/.exec(location.hash || "");
   if (sm) { SHR = sm[1]; try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {  } }
-  if (m) { X = m[1]; lsSet("phx", X); try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {  } }
-  else if (cx) { X = cx; lsSet("phx", X); }
-  else X = XRE.test(lsGet("phx")) ? lsGet("phx") : "";
+  var rx = XRE.test(lsGet("phx")) ? lsGet("phx") : "";
+  if (m) { try { history.replaceState(null, "", location.pathname + location.search); } catch (e) {  } }
+  if (cx) { X = cx; lsSet("phx", X); }
+  else if (m && (m[1] === rx || window.confirm("這條連結要連到後端（…" + m[1].slice(-6) + "）" + (rx ? "，跟這台原本連的（…" + rx.slice(-6) + "）不一樣" : "") + "。\n只有開發者給你的正式連結才按「確定」；不確定請按「取消」。"))) { X = m[1]; lsSet("phx", X); }
+  else X = rx;
   DK = TRE.test(lsGet("phdk")) ? lsGet("phdk") : rnd32(); lsSet("phdk", DK);
-  T = TRE.test(ssGet("pht")) ? ssGet("pht") : "";
+  T = TRE.test(ssGet("pht")) && ssGet("phtx") === X ? ssGet("pht") : "";
 })();
 
 function post(fn, a, ms) {
@@ -77,7 +79,9 @@ function card(kids, cls) {
   APP.className = "ph-app"; APP.innerHTML = "";
   APP.appendChild(h("div", { class: "ph-scr " + (cls || "") }, [h("div", { class: "ph-card" }, kids)]));
 }
-function title(sub) { return [h("h1", { class: "ph-t" }, ["🗂 PH資料庫"]), sub ? h("p", { class: "ph-sub", text: sub }) : null]; }
+function phLogo(c) { return h("img", { class: c || "ph-logo", src: "ph-logo-192.png", alt: "", width: "80", height: "80", decoding: "async" }); }
+function phBrand() { return h("b", { class: "ph-bt" }, [h("span", { class: "ph-badge" }, [phLogo("ph-blogo")]), "PH資料庫"]); }
+function title(sub) { return [h("div", { class: "ph-head" }, [phLogo(), h("h1", { class: "ph-t", text: "PH資料庫" })]), sub ? h("p", { class: "ph-sub", text: sub }) : null]; }
 function msgEl() { return h("div", { class: "ph-msg", role: "status", "aria-live": "polite" }); }
 
 function scrNoX() {
@@ -116,21 +120,19 @@ function scrLogin(why) {
 }
 
 function scrCode(sec) {
-  var at = { inputmode: "text", maxlength: "5", autocapitalize: "off", autocorrect: "off", spellcheck: "false" };
-  var a = h("input", Object.assign({ class: "ph-in ph-box", autocomplete: "one-time-code", "aria-label": "驗證碼前 5 碼（大小寫要一樣）" }, at));
-  var b = h("input", Object.assign({ class: "ph-in ph-box", autocomplete: "off", "aria-label": "驗證碼後 5 碼（大小寫要一樣）" }, at));
+  var a = h("input", { class: "ph-in ph-box", inputmode: "numeric", maxlength: "3", autocomplete: "one-time-code", "aria-label": "驗證碼前 3 個數字" });
+  var b = h("input", { class: "ph-in ph-box", inputmode: "numeric", maxlength: "3", autocomplete: "off", "aria-label": "驗證碼後 3 個數字" });
   var m = msgEl(), busy = false;
-  var cl = function (v) { v = String(v || "").replace(/[！-～]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 65248); }).replace(/[^A-Za-z0-9]/g, ""); return v; };
-  var put = function (v) { v = cl(v).slice(0, 10); a.value = v.slice(0, 5); b.value = v.slice(5); if (v.length >= 5 && v.length < 10) b.focus(); };
-  a.oninput = function () { var v = cl(a.value); if (v.length > 5) { put(v); return; } a.value = v; if (v.length === 5) b.focus(); };
-  b.oninput = function () { b.value = cl(b.value).slice(0, 5); if (b.value.length === 5 && a.value.length === 5) ok.onclick(); };
+  var put = function (v) { v = String(v || "").replace(/\D/g, "").slice(0, 6); a.value = v.slice(0, 3); b.value = v.slice(3); if (v.length >= 3 && v.length < 6) b.focus(); };
+  a.oninput = function () { var v = a.value.replace(/\D/g, ""); if (v.length > 3) { put(v); return; } a.value = v; if (v.length === 3) b.focus(); };
+  b.oninput = function () { b.value = b.value.replace(/\D/g, "").slice(0, 3); if (b.value.length === 3) ok.onclick(); };
   b.onkeydown = function (ev) { if (ev.key === "Backspace" && !b.value) a.focus(); if (ev.key === "Enter") ok.onclick(); };
-  a.onpaste = function (ev) { var t = (ev.clipboardData || window.clipboardData).getData("text"); if (cl(t).length > 5) { ev.preventDefault(); put(t); } };
+  a.onpaste = function (ev) { var t = (ev.clipboardData || window.clipboardData).getData("text"); if (/\d/.test(t)) { ev.preventDefault(); put(t); } };
   var ok = h("button", { type: "button", class: "ph-btn pri", id: "ph-codego", text: "確認" });
   ok.onclick = function () {
     if (busy) return;
-    var v = cl(a.value + b.value);
-    if (!/^([A-Za-z0-9]{10}|\d{6})$/.test(v)) { m.textContent = "要 10 碼（英文、數字，大小寫要一樣）"; return; }
+    var v = (a.value + b.value).replace(/\D/g, "");
+    if (v.length !== 6) { m.textContent = "要 6 個數字"; return; }
     busy = true; ok.disabled = true; m.textContent = "⏳ 確認中…";
     call("phCode", [sec, v]).then(function (r) {
       busy = false; ok.disabled = false;
@@ -142,7 +144,7 @@ function scrCode(sec) {
   var back = h("button", { type: "button", class: "ph-btn", text: "← 回登入" }); back.onclick = function () { scrLogin(); };
   card(title("🔐 LINE 驗證碼（每次登入都要）").concat([
     h("p", { class: "ph-sub2", text: "驗證碼已經傳到你的 LINE「藥戰手冊」（5 分鐘內有效）" }),
-    h("label", { class: "ph-lb", text: "10 碼驗證碼（大小寫要一樣）" }), h("div", { class: "ph-boxes" }, [a, b]),
+    h("label", { class: "ph-lb", text: "6 位數驗證碼" }), h("div", { class: "ph-boxes" }, [a, b]),
     ok, back, m,
     h("p", { class: "ph-note" }, ["沒收到：確認 LINE「藥戰手冊」的通知有打開；等一下按「← 回登入」再試。", h("br"), "驗證碼不要給任何人看。"])
   ]), "code");
@@ -150,7 +152,7 @@ function scrCode(sec) {
 }
 
 function enter(r) {
-  T = r.t; ssSet("pht", T); ME = r.me || {}; IDLE_MIN = r.idle || 30; LAST = Date.now(); PING = Date.now();
+  T = r.t; ssSet("pht", T); ssSet("phtx", X); ME = r.me || {}; IDLE_MIN = r.idle || 30; LAST = Date.now(); PING = Date.now();
   main();
 }
 function main() {
@@ -158,7 +160,7 @@ function main() {
   var who = h("span", { class: "ph-who", text: (ME.name || "") + (ME.emp ? " " + ME.emp : "") + (ME.dev ? "（開發者）" : "") });
   var idle = h("span", { class: "ph-idle", id: "ph-idle" });
   var out = h("button", { type: "button", class: "ph-out", id: "ph-out", text: "登出" }); out.onclick = function () { bye(false); };
-  APP.appendChild(h("header", { class: "ph-bar" }, [h("b", { class: "ph-bt", text: "🗂 PH資料庫" }), h("span", { class: "ph-bs" }, [who, idle, out])]));
+  APP.appendChild(h("header", { class: "ph-bar" }, [phBrand(), h("span", { class: "ph-bs" }, [who, idle, out])]));
   var col = h("main", { class: "ph-main" });
   APP.appendChild(col);
   wm();
@@ -405,7 +407,7 @@ function scrShare() {
     if (!r || !r.ok || !r.sum) { card(title("QR 打不開").concat([h("p", { class: "ph-note", text: (r && r.err) || (j && j.err) || "請再跟主管要一個新的 QR。" })])); return; }
     APP.className = "ph-app in"; APP.innerHTML = "";
     var left = h("span", { class: "ph-who", id: "ph-qrleft" });
-    APP.appendChild(h("header", { class: "ph-bar" }, [h("b", { class: "ph-bt", text: "🗂 PH資料庫" }), h("span", { class: "ph-bs" }, [left])]));
+    APP.appendChild(h("header", { class: "ph-bar" }, [phBrand(), h("span", { class: "ph-bs" }, [left])]));
     var col = h("main", { class: "ph-main" }), wrap = h("div", { class: "qcz qcroot phshr" }), inner = h("div", { class: "wrap" });
     wrap.appendChild(inner); col.appendChild(wrap); APP.appendChild(col);
     wm("QR 檢視");
@@ -413,7 +415,7 @@ function scrShare() {
     var tm = 0, tick = function () {
       var s = Math.max(0, Math.round((r.exp - Date.now()) / 1000));
       left.textContent = "📱 QR 檢視・剩 " + Math.floor(s / 60) + ":" + ("0" + s % 60).slice(-2);
-      if (!s) { clearInterval(tm); card(title("QR 時間到了").concat([h("p", { class: "ph-note", text: "這一頁已經清掉了。要再看，請跟主管要一個新的 QR。" })])); var w = $("#ph-wm"); if (w) w.remove(); }
+      if (!s) { clearInterval(tm); [].slice.call(document.querySelectorAll(".dayv")).forEach(function (x) { x.remove(); }); card(title("QR 時間到了").concat([h("p", { class: "ph-note", text: "這一頁已經清掉了。要再看，請跟主管要一個新的 QR。" })])); var w = $("#ph-wm"); if (w) w.remove(); }
     };
     tm = setInterval(tick, 1000); tick();
   }, function (e) { card(title("QR 打不開").concat([h("p", { class: "ph-note", text: "連不上（" + String(e && e.message || e) + "），網路好了再掃一次。" })])); });
@@ -438,7 +440,17 @@ var Q = { boot: false, busy: false, none: false, dev: false, may: false, me: { n
 var SITES = {}, SORD = [];
 var TITLE = "台北藥劑科門診 藥袋列印品質 暨 調劑品質 查檢表";
 var ITEMS = ["藥袋列印品質：列印字樣能清楚辨識無斷句、條碼刷讀檢測", "藥袋調劑品質：劑型、規格、藥品、用法、數量，是否正確"];
-var S = { site: "a", sig: null, rows: {}, edit: null, ce: { emp: "", name: "" } };
+var S = { site: "a", sig: null, rows: {}, edit: null, ce: { emp: "", name: "" }, tb: {} };
+var SIG_TITLE = "台北藥劑科門診 醫師/藥師 處方簽章查檢表";
+var SIG_ITEMS = ["1. 醫師簽章", "2. 藥師簽章"];
+var TABF = {
+  bag: { w: [10.5, 9, 7, 7, 7, 22.75, 7, 7, 22.75], cols: ["d", "no", "n", "a+", "a-", "am", "b+", "b-", "bm"], heads: ["日期", "領藥號", "筆數", "符合", "不符", "不符事項", "符合", "不符", "不符事項"], grp: [3, 6, 9], hdrH: 130, maxH: 48, diag: true, memo: true, n: true, secs: function (C) { return C.secs; }, rows: function (C) { return C.rows; }, title: function () { return TITLE; }, items: function () { return ITEMS; }, ng: ["列印品質", "調劑品質"], ngl: ["藥袋列印品質", "藥袋調劑品質"] },
+  sig: { w: [18, 22, 15, 15, 15, 15], cols: ["d", "no", "a+", "a-", "b+", "b-"], heads: ["日期", "領藥號", "符合", "不符", "符合", "不符"], grp: [2, 4, 6], hdrH: 66, maxH: 66, diag: false, memo: false, n: false, secs: function () { return 2; }, rows: function () { return 8; }, title: function () { return SIG_TITLE; }, items: function () { return SIG_ITEMS; }, ng: ["醫師簽章", "藥師簽章"], ngl: ["醫師簽章", "藥師簽章"] }
+};
+function TF(f) { return TABF[f || S.form] || TABF.bag; }
+function NR(f, C) { var t = TF(f); C = C || SITES[S.site]; return t.secs(C) * t.rows(C); }
+function tbPark() { if (!TABF[S.form] || S.edit) return; S.tb = S.tb || {}; S.tb[S.form] = { rows: S.rows, sig: S.sig, ce: S.ce }; }
+function tbLoad(f) { S.tb = S.tb || {}; var t = S.tb[f] || (S.tb[f] = { rows: {}, sig: null, ce: { emp: "", name: "" } }); S.rows = t.rows; S.sig = t.sig; S.ce = t.ce; }
 var $ = function (s, r) { return (r || document).querySelector(s); };
 function el(t, a, kids) { var x = document.createElement(t); for (var k in (a || {})) { if (k === "text") x.textContent = a[k]; else if (k.slice(0, 2) === "on") x[k] = a[k]; else if (a[k] !== null && a[k] !== undefined) x.setAttribute(k, a[k]); } (kids || []).forEach(function (c) { if (c) x.appendChild(typeof c === "string" ? document.createTextNode(c) : c); }); return x; }
 function ovl() {
@@ -457,6 +469,35 @@ function ceFocus() { var x = $(S.ce.emp ? "#qc-cename" : "#qc-ceemp"); if (x) x.
 function bagSigDrop() {
   if (S.sig && S.sig.who !== ceWho()) { S.sig.img = null; S.sig = null; var b = document.querySelector(".qcz .paper:not(.pidp) .signrow .sigbox"); if (b) { b.classList.remove("done"); b.innerHTML = ""; b.appendChild(el("span", { class: "ph", text: "✍️ 點這裡電子簽名" })); } toast("查檢者換了：簽名拿掉了，請重新簽"); }
 }
+function ekey(v) { var e = String(v || "").replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }).replace(/[\s　]+/g, "").toUpperCase(); if (/^\d+$/.test(e)) e = e.replace(/^0+(?=\d)/, ""); return e; }
+function whoMapLoad() {
+  if (Q.whoMap) return Promise.resolve(Q.whoMap);
+  if (Q.whoMapP) return Q.whoMapP;
+  Q.whoMapP = api("whomap").then(function (x) { Q.whoMap = x.map && typeof x.map === "object" ? x.map : {}; return Q.whoMap; }, function () { Q.whoMapP = null; return null; });
+  return Q.whoMapP;
+}
+function nameAuto(o) {
+  var t = null;
+  return function (now) {
+    var e = o.emp(); clearTimeout(t);
+    if (!e) { if (o.name()) o.set(""); o.setAuto(""); return; }
+    if (o.name() && o.name() !== o.auto()) return;
+    var k = ekey(e), fill = function (n) {
+      if (o.emp() !== e || (o.name() && o.name() !== o.auto())) return;
+      if (n) { if (o.name() !== n) o.set(n); o.setAuto(n); }
+      else if (o.auto() && o.name() === o.auto()) { o.set(""); o.setAuto(""); }
+    };
+    if (Q.whoMap && Object.prototype.hasOwnProperty.call(Q.whoMap, k)) { fill(Q.whoMap[k]); return; }
+    if (Q.whoC[k] !== undefined) { fill(Q.whoC[k]); return; }
+    if (Q.whoMap && !now) { fill(""); return; }
+    if (e.length < 2 && !now) return;
+    t = setTimeout(function () { api("who", e).then(function (x) { Q.whoC[k] = x.name || ""; if (x.name && Q.whoMap) Q.whoMap[k] = x.name; fill(Q.whoC[k]); }, function () {  }); }, now ? 0 : 250);
+  };
+}
+function empEnter(emp, run, next) {
+  emp.addEventListener("keydown", function (e) { if (e.key === "Enter" && !e.isComposing) { e.preventDefault(); run(true); if (next) next.focus(); } });
+  emp.addEventListener("blur", function () { run(true); });
+}
 function ceFields(st, o) {
   st = st || S.ce; o = o || { id: 1, kp: "⌨ 查檢者 員工編號：", drop: bagSigDrop };
   var ro = !!S.edit, auto = st.auto && st.auto === st.name ? st.name : "";
@@ -468,15 +509,9 @@ function ceFields(st, o) {
   var out = [bE, bN];
   if (ro) return out;
   var changed = function () { o.drop(st); };
-  var autoName = function () {
-    var e = st.emp, fill = function (n) { if (st.emp !== e || (st.name && st.name !== auto)) return; if (n) { st.name = n; nm.value = n; auto = n; } else if (auto && st.name === auto) { st.name = ""; nm.value = ""; auto = ""; } st.auto = auto; upd(); changed(); };
-    if (!e || e.length < 2 || (st.name && st.name !== auto)) return;
-    clearTimeout(autoName.t);
-    autoName.t = setTimeout(function () {
-      if (Q.whoC[e] !== undefined) { fill(Q.whoC[e]); return; }
-      api("who", e).then(function (x) { Q.whoC[e] = x.name || ""; fill(Q.whoC[e]); }, function () {  });
-    }, 350);
-  };
+  var autoName = nameAuto({ emp: function () { return st.emp; }, name: function () { return st.name; }, auto: function () { return auto; }, setAuto: function (a) { auto = a; st.auto = a; },
+    set: function (n) { st.name = n; nm.value = n; upd(); changed(); } });
+  empEnter(emp, autoName, nm);
   var en = forceKeys(emp, codeChar, 12, st.emp, function (v) { st.emp = v; upd(); changed(); autoName(); });
   emp.oninput = function () { if (en.comp()) return; var v = emp.value.replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }).toUpperCase().replace(/[^A-Z0-9\-]/g, ""); if (v !== emp.value) emp.value = v; st.emp = v; en.sync(v); upd(); changed(); autoName(); };
   nm.oninput = function () { st.name = nm.value.trim(); auto = ""; st.auto = ""; upd(); changed(); };
@@ -484,15 +519,10 @@ function ceFields(st, o) {
   return out;
 }
 function isDev() { return !!Q.dev; }
-function mayEdit() { return !!(Q.dev || Q.may); }
+function mayEdit() { return !!Q.may; }
 function mkey(d) { return d.getFullYear() + "-" + (d.getMonth() + 1); }
-function lockAt(key) {
-  var c = Q.cfg || {}, L = (c.lock || {})[key] || {}, p = key.split("-");
-  if (L.at) return new Date(L.at);
-  if (c.autoDay) return new Date(+p[0], +p[1], c.autoDay, 0, 0);
-  return null;
-}
-function isLocked(key) { var L = ((Q.cfg || {}).lock || {})[key] || {}; if (L.st === "lock") return true; if (L.st === "open") return false; var t = lockAt(key); return !!(t && new Date() >= t); }
+function lockAt() { return null; }
+function isLocked() { return false; }
 function canEdit(rec) { return mayEdit() && !isLocked(mkey(rec.at)); }
 
 function api(act, a, b) {
@@ -513,6 +543,33 @@ function pdfJpegs(u8) {
   var re = /\/Filter \/DCTDecode \/Length (\d+) >>\nstream\n/g, m;
   while ((m = re.exec(bin))) { var st = m.index + m[0].length, n = +m[1]; out.push("data:image/jpeg;base64," + btoa(bin.substr(st, n))); re.lastIndex = st + n; }
   return out;
+}
+// 使用者說「為什麼（舊的 PDF）沒有改變」：開發者可以用現在的排法重做 PDF（內容、修改紀錄都不變；舊的 PDF 搬到「舊版」資料匣）
+function redoOne(r) {
+  var E = r;
+  return fetchPdf(E).then(function () {
+    var rec = { id: E.id, form: E.form || "bag", site: E.site, at: E.at, edits: E.edits || [] };
+    if (rec.form === "pid") rec.secs = cloneSecs(E.secs);
+    else { rec.rows = JSON.parse(JSON.stringify(E.rows || [])); rec.sig = E.sig; rec.ce = ceOf(E.sig); }
+    rec.keep = (E.pngs || []).slice(rec.form === "pid" ? 2 : 1);
+    return makePdf(rec, rec.form === "pid" ? E.pngs : E.png).then(function () { return toB64(rec.pdf); }).then(function (b64) {
+      return api("redo", E.id, b64).then(function (x) { E.pdf = rec.pdf; E.pngs = rec.pngs; E.png = rec.png; E.file = x.file || E.file; return E; });
+    });
+  });
+}
+function redoPdfs(list) {
+  var i = 0, ok = 0, bad = [];
+  var next = function () {
+    if (i >= list.length) {
+      toast("🔄 PDF 重做好了：" + ok + " 份" + (bad.length ? "；沒成功 " + bad.length + " 份（" + bad[0] + "）" : ""));
+      if (Q.tab === "arch") renderArch();
+      return;
+    }
+    var r = list[i++];
+    toast("⏳ PDF 重做中… " + i + "／" + list.length);
+    redoOne(r).then(function () { ok++; next(); }, function (e) { bad.push(errText(e)); next(); });
+  };
+  next();
 }
 function fetchPdf(r, ver) {
   if (ver === undefined && r.pdf && r.pngs) return Promise.resolve(r);
@@ -539,6 +596,7 @@ function mkRec(x) {
 }
 function noImgSig(s) { return s ? { who: s.who, at: s.at } : null; }
 var QC_CSS = ".qcz{--ink:#1F2A2E;--ink2:#4A5565;--muted:#6B7680;--line:#1F2A2E;--line2:#C9D2CF;--bg:#F4F7F6;--paper:#fff;--accent:#1B7F5C;--ok:#15803D;--okbg:#E8F6EE;--bad:#B91C1C;--badbg:#FDECEC;--hi:#FFF4CC}\n.qcz *{box-sizing:border-box}\n.qcz{margin:0;background:var(--bg);color:var(--ink);font-family:system-ui,-apple-system,\"Noto Sans TC\",\"PingFang TC\",\"Microsoft JhengHei\",sans-serif;font-size:15px}\n.qcz .top{position:sticky;top:0;z-index:20;background:#fff;border-bottom:1px solid var(--line2);padding:10px 16px;display:flex;flex-wrap:wrap;gap:10px;align-items:center}\n.qcz .top b{font-size:15px}\n.qcz .seg{display:inline-flex;border:1px solid var(--line2);border-radius:999px;overflow:hidden}\n.qcz .seg button{border:0;background:#fff;padding:7px 14px;font:inherit;cursor:pointer;color:var(--ink2)}\n.qcz .seg button.on{background:var(--accent);color:#fff;font-weight:700}\n.qcz .note{font-size:12.5px;color:var(--muted)}\n.qcz .wrap{max-width:1180px;margin:16px auto;padding:0 16px 80px}\n.qcz .paper{background:var(--paper);border-radius:10px;box-shadow:0 2px 12px rgba(0,0,0,.08);padding:20px 22px 26px}\n.qcz .hd{display:flex;align-items:center;gap:12px;min-height:56px}\n.qcz .logo{display:flex;align-items:center;gap:10px}\n.qcz .logo i{width:44px;height:44px;border-radius:8px;background:#C62828;display:grid;place-items:center;color:#fff;font-style:normal;font-weight:900;font-size:22px}\n.qcz .logo span{font-weight:800;font-size:20px;letter-spacing:.08em}\n.qcz .logo small{display:block;font-size:11px;color:var(--muted);letter-spacing:0;font-weight:600}\n.qcz .logo.kid i{background:linear-gradient(135deg,#E53935,#F06292)}\n.qcz h1{font-size:clamp(18px,2.6vw,30px);margin:10px 0 4px;text-align:center;letter-spacing:.04em;font-weight:900;text-wrap:balance}\n.qcz .signrow{display:flex;justify-content:flex-end;align-items:center;gap:10px;margin:6px 0 10px;flex-wrap:wrap}\n.qcz .signrow .lb{font-weight:800;font-size:18px}\n.qcz .cebox{position:relative;display:inline-flex;align-items:stretch;width:8.5em;height:50px;border:1.5px solid #9AA7A3;border-radius:8px;background:#fff;cursor:text}\n.qcz .cebox:focus-within{border-color:var(--accent);box-shadow:0 0 0 2px rgba(27,127,92,.15)}\n.qcz .cebox input{flex:1;min-width:0;width:100%;border:0;outline:0;background:transparent;font:inherit;font-size:16px;color:var(--ink);padding:18px 10px 4px;border-radius:8px}\n.qcz .cebox .celb{position:absolute;left:10px;top:50%;transform:translateY(-50%);color:#9AA7A3;font-size:15px;font-weight:600;pointer-events:none;transition:top .12s,font-size .12s,color .12s}\n.qcz .cebox.has .celb,.qcz .cebox:focus-within .celb{top:12px;font-size:11px;color:var(--ink2)}\n.qcz .cbe input{text-transform:uppercase;letter-spacing:.04em}\n.qcz .cebox:has(input[readonly]){background:#F1F4F3}\n@media (max-width:560px){.qcz .signrow{justify-content:flex-start}.qcz .signrow .lb{flex-basis:100%}.qcz .cebox{flex:1 1 40%;width:auto}.qcz .signrow .sigbox{flex-basis:100%}}\n.qcz .msum{border:1.5px solid var(--accent);border-radius:12px;background:#fff;padding:12px 14px;margin:8px 0 14px}\n.qcz .msum .mshd{display:flex;flex-wrap:wrap;align-items:center;gap:8px}\n.qcz .msum .mshd b{font-size:17px;margin-right:auto}\n.qcz .msum .mshd .btn{padding:7px 12px;font-size:14px}\n@media (max-width:560px){.qcz .msum .mshd b{flex-basis:100%}.qcz .msum .mshd .btn{padding:6px 10px;font-size:13px}}\n.qcz .msum h4{margin:14px 0 6px;color:var(--accent);font-size:15px}\n.qcz .msum .mswrap{overflow-x:auto;-webkit-overflow-scrolling:touch}\n.qcz .mstab{border-collapse:collapse;width:100%;min-width:520px;font-size:14px}\n.qcz .mstab th,.qcz .mstab td{border:1px solid var(--line2);padding:6px 8px;text-align:left;vertical-align:top}\n.qcz .mstab th{background:#E8F1EE;font-weight:800;white-space:nowrap}\n.qcz .mstab td.num{text-align:center;font-variant-numeric:tabular-nums}\n.qcz .mstab td.b{font-weight:800}\n.qcz .mstab td.red{color:var(--bad);font-weight:700}\n.qcz .msumbtn.on{border-color:var(--accent);color:var(--accent)}\n.qcz .qrv{display:flex;align-items:center;justify-content:center;background:rgba(15,25,22,.6)}\n.qcz .qrbox{background:#fff;border-radius:14px;padding:18px 20px;max-width:420px;width:calc(100% - 32px);text-align:center;display:flex;flex-direction:column;gap:10px;align-items:center}\n.qcz .qrbox h3{margin:0;font-size:17px}\n.qcz .qrbox .qrimg{width:min(300px,70vw);height:auto;image-rendering:pixelated;border:1px solid var(--line2);user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;-webkit-tap-highlight-color:transparent}\n.qcz .mstab th:first-child,.qcz .mstab td:first-child{min-width:8.5em}\n.qcz .qrbox .qrt{font-size:14px;color:var(--ink2)}\n.qcz .qrbox .qrleft{color:var(--bad);font-variant-numeric:tabular-nums}\n.qcz .pastebox{min-width:200px;min-height:38px;border:1.5px dashed #9AA7A3;border-radius:8px;padding:8px 10px;font-size:13px;color:var(--muted);background:#FAFCFB;cursor:text;outline:none;caret-color:transparent;overflow:hidden;max-height:60px}\n.qcz .pastebox:empty::before{content:attr(data-ph)}\n.qcz .pastebox:focus{border-color:var(--accent);background:#F1F7F5}\n.qcz .attbox{margin-top:16px;border:1px dashed var(--line2);border-radius:10px;padding:10px 12px;display:flex;flex-direction:column;gap:8px}\n.qcz .atthd{display:flex;flex-wrap:wrap;gap:6px 12px;align-items:baseline}\n.qcz .attrow{display:flex;flex-wrap:wrap;gap:8px;align-items:stretch}\n.qcz .attpick{position:relative;overflow:hidden;display:inline-flex;align-items:center;padding:8px 14px}\n.qcz .attpick input{position:absolute;inset:0;opacity:0;cursor:pointer}\n.qcz .attpaste{flex:1 1 220px}\n.qcz .attth{display:flex;flex-wrap:wrap;gap:8px}\n.qcz .attit{position:relative;width:96px;height:96px;border:1px solid var(--line2);border-radius:8px;overflow:hidden;background:#fff}\n.qcz .attit img{width:100%;height:100%;object-fit:cover}\n.qcz .attit span{position:absolute;left:4px;bottom:3px;background:rgba(0,0,0,.6);color:#fff;font-size:11px;border-radius:4px;padding:0 5px}\n.qcz .attit .attx{position:absolute;right:3px;top:3px;border:0;border-radius:999px;width:26px;height:26px;background:rgba(0,0,0,.65);color:#fff;cursor:pointer;font-size:13px}\n.qcz .pline .cebox{width:7.5em;height:46px}\n.qcz .pline .cebox input{border:0;border-bottom:0;background:transparent;padding:17px 9px 3px;border-radius:8px;outline:0}\n.qcz .pline .cebox input:focus{outline:0}\n.qcz .pline{gap:10px 18px}\n.qcz .pgrp{display:inline-flex;align-items:center;gap:6px 8px;flex-wrap:nowrap}\n@media (max-width:760px){.qcz .pgrp{flex-wrap:wrap}}\n@media (max-width:560px){.qcz .pgrp{width:100%}.qcz .pgrp>.plb:first-child{flex-basis:100%}.qcz .pgrp .pemp,.qcz .pgrp .pname{flex:1 1 40%;width:auto}.qcz .pgrp .cebox{flex:1 1 40%}.qcz .pgrp .sigbox{flex:1 1 60%}}\n.qcz .kbdh{margin:2px 0 8px;font-size:12.5px}\n.qcz td.c:focus{outline:3px solid var(--accent);outline-offset:-3px}\n.qcz .pop button.tdy{font-weight:800;border-color:var(--accent);color:var(--accent)}\n.qcz .sigbox{min-width:220px;min-height:52px;border:1.5px dashed #9AA7A3;border-radius:8px;display:flex;align-items:center;gap:10px;padding:4px 10px;cursor:pointer;background:#FAFCFB}\n.qcz .sigbox.done{border-style:solid;border-color:var(--accent);background:#fff}\n.qcz .sigbox img{height:44px;max-width:180px;pointer-events:none;-webkit-user-drag:none;user-select:none}\n.qcz .sigbox.done{user-select:none;-webkit-user-select:none}\n.qcz .sigbox .st{font-size:12.5px;color:var(--ink2);line-height:1.35}\n.qcz .sigbox .ph{color:var(--muted);font-size:14px}\n.qcz .tscroll{overflow-x:auto;-webkit-overflow-scrolling:touch}\n.qcz table{border-collapse:collapse;width:100%;min-width:920px;table-layout:fixed}\n.qcz th,.qcz td{border:1px solid var(--line);padding:0;height:34px;font-size:15px;text-align:center;vertical-align:middle}\n.qcz thead th{font-size:clamp(14px,1.6vw,19px);font-weight:900;text-align:left;padding:8px 12px;line-height:1.5;vertical-align:top}\n.qcz thead th.diag{position:relative;text-align:right;vertical-align:middle;padding-right:18px;background:linear-gradient(to top right,transparent calc(50% - .6px),#3B82C4 50%,transparent calc(50% + .6px))}\n.qcz tr.sub th{font-weight:800;font-size:15px;padding:4px 2px;text-align:center;border-bottom:1.5px solid var(--line)}\n.qcz tr.sub th.colh{cursor:pointer;color:var(--accent);text-decoration:underline dotted;text-underline-offset:3px}\n.qcz tr.sub th.colh:hover{background:#F1F7F5}\n.qcz tr.sub.thick th{border-top:3px solid var(--line)}\n.qcz tbody.sec{border-top:3px solid var(--line)}\n.qcz td.c{cursor:pointer;position:relative;user-select:none}\n.qcz td.c:hover{background:#F1F7F5}\n.qcz td.c.on{background:var(--okbg);color:var(--ok);font-weight:900;font-size:19px}\n.qcz td.c.on.badc{background:var(--badbg);color:var(--bad)}\n.qcz td input{width:100%;height:100%;min-height:32px;border:0;background:transparent;font:inherit;text-align:center;padding:2px 4px;color:var(--ink)}\n.qcz td input:focus{outline:2px solid var(--accent);outline-offset:-2px;background:#fff}\n.qcz td.memo input{text-align:left}\n.qcz td.memo.need input{background:var(--hi)}\n.qcz td.dt{cursor:pointer}\n.qcz td.dt span{display:block;padding:6px 2px;min-height:32px;font-variant-numeric:tabular-nums;white-space:nowrap;font-size:14px}\n.qcz td.dt span:empty::after{content:\"點一下\";color:#B8C2BF;font-size:12px}\n.qcz .pop{position:absolute;z-index:50;background:#fff;border:1px solid var(--line2);border-radius:10px;box-shadow:0 10px 30px rgba(0,0,0,.18);padding:8px;display:flex;flex-direction:column;gap:6px;min-width:190px}\n.qcz .pop button{font:inherit;font-size:14px;text-align:left;border:1px solid var(--line2);background:#fff;border-radius:8px;padding:7px 10px;cursor:pointer}\n.qcz .pop button:hover{background:#F1F7F5}\n.qcz .pop button.pri{background:var(--accent);border-color:var(--accent);color:#fff}\n.qcz .pop .row{display:flex;gap:6px;align-items:center}\n.qcz .pop select,.qcz .pop input{font:inherit;font-size:14px;padding:5px;border:1px solid var(--line2);border-radius:6px}\n.qcz .pop .t{font-size:12px;color:var(--muted);padding:0 2px}\n.qcz .bar{display:flex;gap:10px;justify-content:flex-end;margin-top:16px;flex-wrap:wrap}\n.qcz .btn{font:inherit;border-radius:10px;padding:10px 18px;border:1px solid var(--line2);background:#fff;cursor:pointer}\n.qcz .btn.pri{background:var(--accent);border-color:var(--accent);color:#fff;font-weight:800}\n.qcz .msg{margin-top:12px;font-size:14px;line-height:1.6}\n.qcz .msg .bad{color:var(--bad)}\n.qcz .msg .okm{color:var(--ok)}\n.qcz .modal{position:fixed;inset:0;background:rgba(10,20,25,.45);z-index:100;display:flex;align-items:center;justify-content:center;padding:16px}\n.qcz .dlg{background:#fff;border-radius:14px;padding:16px 18px;width:min(560px,100%)}\n.qcz .dlg h3{margin:0 0 8px}\n.qcz .sigfs{position:fixed;inset:0;z-index:150;background:#fff;display:flex;flex-direction:column}\n.qcz .sigfs .sgin{position:absolute;left:0;top:0;width:100%;height:100%;transform-origin:0 0;overflow:hidden;background:#fff}\n.qcz .sigfs .sgstage{position:absolute;inset:0}\n.qcz .sigfs .pad{position:absolute;inset:0;width:100%;height:100%;touch-action:none;display:block;background:repeating-linear-gradient(0deg,#fff 0,#fff 49px,#F0F3F2 50px)}\n.qcz .sigfs .base{position:absolute;left:5%;right:5%;bottom:calc(max(8px,env(safe-area-inset-bottom,0px)) + 28px);border-bottom:2px dashed #C9D2CF;pointer-events:none}\n.qcz .sigfs .base span{position:absolute;left:0;bottom:6px;color:#B8C2BF;font-size:15px}\n.qcz .sigfs .sgbar{position:absolute;left:0;right:0;top:0;z-index:3;display:flex;align-items:flex-start;gap:8px;padding:max(8px,env(safe-area-inset-top,0px)) max(10px,env(safe-area-inset-right,0px)) 18px max(10px,env(safe-area-inset-left,0px));pointer-events:none;background:linear-gradient(to bottom,rgba(255,255,255,.88) 0,rgba(255,255,255,.55) 65%,rgba(255,255,255,0) 100%)}\n.qcz .sigfs.rot .sgbar{padding:8px 12px 18px}\n.qcz .sigfs .sgt{display:flex;flex-direction:column;gap:2px;min-width:0;margin-right:auto;padding-top:2px}\n.qcz .sigfs .sgt b{font-size:15px;color:#1F2A2E;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}\n.qcz .sigfs .sgt .who{font-size:12px;color:#6B7680;display:block;line-height:1.35}\n.qcz .sigfs .sgbtns{display:flex;gap:8px;flex:none;pointer-events:none}\n.qcz .sigfs .sgbtns .btn{pointer-events:auto;border-radius:999px;padding:9px 18px;font-size:16px;font-weight:700;min-height:42px;background:rgba(255,255,255,.96);border:1px solid #C9D2CF;box-shadow:0 3px 10px rgba(0,0,0,.16);touch-action:manipulation}\n.qcz .sigfs .sgbtns .btn.fix.on{background:#FFF4CC;border-color:#E8C66A;color:#7A5200}\n.qcz .sigfs .sgbtns .btn.pri{background:var(--accent);color:#fff;border-color:var(--accent)}\n.qcz .sigfs .wipehint{position:absolute;right:12px;bottom:max(8px,env(safe-area-inset-bottom,0px));color:#AEB8B5;font-size:12px;pointer-events:none;z-index:2}\n.qcz .sigfs .rothint{position:absolute;left:50%;top:46%;transform:translate(-50%,-50%);z-index:2;pointer-events:none;background:rgba(31,42,46,.78);color:#fff;font-size:15px;padding:10px 16px;border-radius:12px;max-width:80%;text-align:center;opacity:0;transition:opacity .4s}\n.qcz .sigfs.rot .rothint.on{opacity:1}\n@media (max-width:560px),(max-height:430px){.qcz .sigfs .sgt .who{display:none}.qcz .sigfs .sgbtns .btn{padding:8px 14px;font-size:15px;min-height:40px}}\n.qcz .sigfs.rot .sgt .who{display:none}\n.qcz .sigbox.done{touch-action:none}\n.qcz .sigbox .gs{font-size:11px;color:var(--muted)}\n.qcz .tabs{display:inline-flex;border:1px solid var(--line2);border-radius:10px;overflow:hidden}\n.qcz .tabs button{border:0;background:#fff;padding:7px 14px;font:inherit;cursor:pointer}\n.qcz .tabs button.on{background:#1F2A2E;color:#fff;font-weight:700}\n@media (max-width:520px){.qcz .tabs .tsub{display:none}}\n.qcz .arch h2{font-size:20px;margin:4px 0 12px}\n.qcz .yr{margin:14px 0 6px;font-weight:900;font-size:18px}\n.qcz .mgrid{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));gap:8px}\n@media (max-width:640px){.qcz .mgrid{grid-template-columns:repeat(4,minmax(0,1fr))}}\n.qcz .mb{font:inherit;border:1px solid var(--line2);background:#fff;border-radius:10px;padding:8px 4px;cursor:pointer;display:flex;flex-direction:column;align-items:center;gap:2px;min-height:58px}\n.qcz .mb b{font-size:16px}\n.qcz .mb small{font-size:11.5px;color:var(--muted)}\n.qcz .mb .ng{color:var(--bad);font-size:11.5px;font-weight:700}\n.qcz .mb.on{border-color:var(--accent);box-shadow:0 0 0 2px var(--accent) inset}\n.qcz .mb:disabled{opacity:.4;cursor:default}\n.qcz .rlist{margin-top:14px;display:flex;flex-direction:column;gap:8px}\n.qcz .ritem{display:flex;align-items:center;gap:10px;border:1px solid var(--line2);border-radius:10px;padding:8px 12px;flex-wrap:wrap}\n.qcz .ritem .t{flex:1 1 220px;min-width:0}\n.qcz .ritem .t b{display:block}\n.qcz .ritem .t small{color:var(--muted)}\n.qcz .ritem .ngt{color:var(--bad);font-size:13px;width:100%}\n.qcz .pdfv{position:fixed;inset:0;z-index:160;background:rgba(10,20,25,.6);display:flex;flex-direction:column}\n.qcz .pdfv .pvbar{display:flex;gap:8px;align-items:center;padding:10px 14px;background:#fff}\n.qcz .pdfv .pvbar b{margin-right:auto}\n.qcz .pdfv .pvbody{flex:1;overflow:auto;padding:12px;display:flex;justify-content:center}\n.qcz .pdfv .pvbody img{max-width:min(100%,900px);height:auto;background:#fff;box-shadow:0 4px 20px rgba(0,0,0,.3)}\n.qcz .dlg .dlgb{display:flex;gap:8px;justify-content:flex-end;margin-top:10px;flex-wrap:wrap}\n.qcz .dlg .hint{font-size:12.5px;color:var(--muted);margin-top:6px}\n.qcz .who{display:inline-flex;align-items:center;gap:6px;font-size:13.5px}\n.qcz .who select{font:inherit;padding:5px 8px;border:1px solid var(--line2);border-radius:8px;background:#fff}\n.qcz .editbar{background:#FFF7E0;border:1px solid #E8C66A;border-radius:10px;padding:10px 12px;margin-bottom:10px;font-size:14px;line-height:1.6}\n.qcz .editbar b{color:#8A5A00}\n.qcz .sigbox.lockd{cursor:not-allowed;opacity:.85}\n.qcz .lk{font-size:11.5px;font-weight:700;color:#8A5A00}\n.qcz .mb .lk{display:block}\n.qcz .ritem .ro{font-size:12.5px;color:var(--muted)}\n.qcz .ritem .ed{font-size:12.5px;color:#8A5A00;width:100%}\n.qcz .lockp{border:1px dashed #E8C66A;background:#FFFBEF;border-radius:10px;padding:10px 12px;margin-top:10px;display:flex;flex-wrap:wrap;gap:8px;align-items:center;font-size:14px}\n.qcz .lockp input{font:inherit;padding:5px 6px;border:1px solid var(--line2);border-radius:6px}\n.qcz .ydl{display:inline-flex;gap:8px;flex-wrap:wrap;margin-left:10px;vertical-align:middle}\n.qcz .ydl .btn{padding:5px 12px;font-size:14px}\n.qcz .set h2{font-size:20px;margin:4px 0 12px}\n.qcz .set h3{font-size:16px;margin:18px 0 8px}\n.qcz .plist{display:grid;grid-template-columns:repeat(auto-fill,minmax(220px,1fr));gap:8px}\n.qcz .plist label{display:flex;gap:8px;align-items:center;border:1px solid var(--line2);border-radius:10px;padding:8px 10px;cursor:pointer}\n.qcz .plist label.dev{background:#F1F7F5;cursor:default}\n.qcz .set select{font:inherit;padding:6px 8px;border:1px solid var(--line2);border-radius:8px}\n.qcz .drvbox{border:1px solid var(--line2);border-radius:10px;padding:12px;display:flex;flex-direction:column;gap:8px;align-items:flex-start}\n.qcz .drvbox .tree{margin:0;font-size:13px;line-height:1.6;background:#F7FAF9;border-radius:8px;padding:10px 12px;overflow-x:auto;max-width:100%}\n.qcz .paper.pidp h1{font-size:clamp(18px,2.4vw,28px)}\n.qcz .paper.pidp .h1b{margin-top:6px}\n.qcz .pgbrk{margin:22px 0 4px;text-align:center;color:var(--muted);font-size:13px;letter-spacing:.2em}\n.qcz .psec{margin:14px 0 18px}\n.qcz .pline{display:flex;flex-wrap:wrap;align-items:center;gap:6px 8px;margin-bottom:6px;font-size:16px}\n.qcz .pline .plb{font-weight:800;font-size:17px;white-space:nowrap}\n.qcz .pline input{font:inherit;border:0;border-bottom:1.5px solid var(--ink);background:#FAFCFB;padding:5px 6px;min-width:0;border-radius:4px 4px 0 0}\n.qcz .pline input:focus{outline:2px solid var(--accent);outline-offset:1px}\n.qcz .pline .pemp{width:8.5em;text-transform:uppercase;letter-spacing:.04em}\n.qcz .pline .pname{width:7em}\n.qcz .pline .psig{min-width:150px;min-height:44px;padding:2px 8px}\n.qcz .pline .psig img{height:34px;max-width:110px}\n.qcz .pline .psig .st{font-size:11.5px}\n.qcz .pdt{display:inline-block;min-width:8.5em;padding:6px 8px;border-bottom:1.5px solid var(--ink);background:#FAFCFB;cursor:pointer;font-variant-numeric:tabular-nums;border-radius:4px 4px 0 0}\n.qcz .pdt:empty::after{content:\"點一下\";color:#B8C2BF;font-size:13px}\n.qcz .pap button{padding:6px 12px}\n.qcz table.ptab{min-width:560px}\n.qcz table.ptab th{font-size:17px;font-weight:900;text-align:center;padding:6px;vertical-align:middle;border-bottom:2.5px solid var(--line)}\n.qcz table.ptab thead tr th{border-top:3px solid var(--line)}\n.qcz table.ptab th.pev{cursor:pointer;color:var(--accent);text-decoration:underline dotted;text-underline-offset:3px}\n.qcz table.ptab th.pev:hover{background:#F1F7F5}\n.qcz table.ptab th.pevh{border-bottom:1px solid var(--line)}\n.qcz table.ptab thead tr.pev2 th{border-top:1px solid var(--line);font-size:16px;padding:4px 2px}\n.qcz table.ptab td.pit{text-align:left;padding:6px 10px;font-weight:700;font-size:15.5px;line-height:1.5}\n.qcz table.ptab td.pc{font-size:16px;font-weight:700;white-space:nowrap}\n.qcz table.ptab td.pc.on{font-size:19px;font-weight:900}\n.qcz table.ptab tbody tr:last-child td{border-bottom:3px solid var(--line)}\n.qcz .pnbox{display:flex;gap:8px;align-items:flex-start;margin-top:6px;flex-wrap:wrap}\n.qcz .pnbox textarea{flex:1 1 260px;min-width:0;font:inherit;padding:6px 8px;border:1px solid var(--line2);border-radius:8px}\n.qcz .pnbox .btn{padding:5px 12px;font-size:14px}\n.qcz .draftbar{background:#EEF6FF;border:1px solid #9CC3EA;border-radius:10px;padding:8px 12px;margin-bottom:10px;font-size:14px;display:flex;flex-wrap:wrap;gap:8px;align-items:center}\n.qcz .draftbar .btn{padding:5px 12px;font-size:14px}\n.qcz .ftag{display:inline-block;font-size:12px;font-weight:700;border-radius:999px;padding:1px 8px;margin-left:6px;background:#E8F0F7;color:#24527A;vertical-align:middle}\n.qcz .ftag.pid{background:#F3EAF8;color:#6B2C8A}\n.qcz .fchips{display:flex;gap:6px;flex-wrap:wrap;margin:8px 0 4px}\n.qcz .fchips button{font:inherit;font-size:13.5px;border:1px solid var(--line2);background:#fff;border-radius:999px;padding:5px 12px;cursor:pointer}\n.qcz .fchips button.on{background:#1F2A2E;color:#fff;border-color:#1F2A2E}\n.qcz .pdfv .pvbody{flex-direction:column;align-items:center;gap:14px}\n@media (max-width:640px){.qcz table.ptab{min-width:0}\n.qcz table.ptab td.pit{font-size:14.5px;padding:5px 6px}\n.qcz table.ptab td.pc{white-space:normal;font-size:14px;padding:4px 2px;line-height:1.25}\n.qcz table.ptab td.pc.on{font-size:18px}\n.qcz table.ptab th{font-size:15px}}\n.qcz .flist{display:flex;flex-direction:column;gap:10px}\n.qcz .frow{border:1px solid var(--line2);border-radius:10px;padding:10px 12px;display:flex;flex-wrap:wrap;gap:8px 12px;align-items:flex-end}\n.qcz .frow .fhd{display:flex;align-items:center;gap:8px;width:100%;flex-wrap:wrap}\n.qcz .frow .fhd .btn{padding:4px 10px;font-size:14px}\n.qcz .frow .fhd .fprev{margin-right:auto;font-size:15px}\n.qcz .frow .fsh{display:flex;align-items:center;gap:4px;font-size:14px}\n.qcz .frow .ff{display:flex;flex-direction:column;gap:3px;font-size:12.5px;color:var(--muted);min-width:0}\n.qcz .frow .ff input{font:inherit;font-size:15px;color:var(--ink);padding:6px 8px;border:1px solid var(--line2);border-radius:8px;min-width:0}\n.qcz .frow .ff .ficon{width:4.5em;text-align:center}\n.qcz .frow .ff.grow{flex:1 1 180px}\n.qcz .frow .ff.full{width:100%}\n.qcz .logo.hasimg .lgimg{height:48px;max-width:min(320px,70vw);object-fit:contain;display:block}\n.qcz .sprev{margin-right:auto;min-width:0}\n.qcz .sprev .hd{min-height:0}\n.qcz .sprev .logo span{font-size:16px}\n.qcz .sprev .logo i{width:34px;height:34px;font-size:17px}\n.qcz .lgrow{display:flex;flex-wrap:wrap;gap:8px;align-items:center;color:var(--ink);font-size:14px}\n.qcz .lgrow input[type=file]{font-size:13px;max-width:100%}\n.qcz .lgrow .btn{padding:4px 10px;font-size:14px}\n.qcz .toast{position:fixed;left:50%;bottom:20px;transform:translateX(-50%);background:#1F2A2E;color:#fff;padding:9px 16px;border-radius:10px;font-size:14px;opacity:0;transition:opacity .2s;pointer-events:none;z-index:200}\n.qcz .toast.on{opacity:1}\n@media (max-width:640px){.qcz .paper{padding:14px 10px}\n.qcz .signrow{justify-content:flex-start}}\n.qcz.qcroot{font-size:15px;color:var(--ink);background:var(--bg);border-radius:12px;padding:10px 0 20px;margin:6px 0 30px;font-family:system-ui,-apple-system,\"Noto Sans TC\",\"PingFang TC\",\"Microsoft JhengHei\",sans-serif}\n.qcz .qtop{display:flex;flex-wrap:wrap;gap:10px;align-items:center;padding:6px 16px 0}\n.qcz .wrap{max-width:none;margin:12px auto 0;padding:0 12px 10px}\n.qcz button:disabled{opacity:.55;cursor:default}\n.qcz.qcov{position:static}\n.qcz.qcov .toast{z-index:9600}\n.qcz .pop{z-index:9200}\n.qcz .kp{position:fixed;left:0;right:0;bottom:0;z-index:180;background:#D5DBE0;padding:6px max(6px,env(safe-area-inset-right,0px)) calc(6px + env(safe-area-inset-bottom,0px)) max(6px,env(safe-area-inset-left,0px));display:flex;flex-direction:column;gap:var(--kg,6px);box-shadow:0 -4px 16px rgba(0,0,0,.18);user-select:none;-webkit-user-select:none;-webkit-touch-callout:none;touch-action:manipulation;-webkit-tap-highlight-color:transparent;box-sizing:border-box}\n.qcz .kp .kph{display:flex;align-items:center;gap:6px;padding:0 4px;font-size:calc(var(--kf,20px) * .7);color:#1F2A2E;width:100%;max-width:var(--kw,1100px);margin:0 auto;min-width:0}\n.qcz .kp .kph span{white-space:nowrap;overflow:hidden;text-overflow:ellipsis;min-width:0}\n.qcz .kp .kph b{font-size:var(--kf,20px);letter-spacing:.06em;font-variant-numeric:tabular-nums;min-width:4ch;background:#fff;border-radius:6px;padding:1px 10px;flex:none}\n.qcz .kp .kbody{display:grid;grid-template-columns:minmax(0,6fr) minmax(0,3.3fr);gap:calc(var(--kg,6px) + 4px);width:100%;max-width:var(--kw,1100px);margin:0 auto}\n.qcz .kp.w9 .kbody{grid-template-columns:minmax(0,9fr) minmax(0,3.6fr)}\n.qcz .kp .kl{display:grid;grid-template-columns:repeat(6,minmax(0,1fr));grid-auto-rows:var(--kh,46px);gap:var(--kg,6px);align-content:start}\n.qcz .kp.w9 .kl{grid-template-columns:repeat(9,minmax(0,1fr))}\n.qcz .kp .kn{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));grid-template-rows:repeat(4,minmax(var(--kh,46px),1fr));gap:var(--kg,6px);padding-left:calc(var(--kg,6px) + 4px);border-left:2px solid #B8C2CC}\n.qcz .kp.w9 .kl{grid-auto-rows:minmax(var(--kh,46px),1fr)}\n.qcz .kp.w9 .kn{grid-template-rows:repeat(4,var(--kh,46px))}\n.qcz .kp button{border:0;border-radius:8px;background:#fff;color:#111;font:inherit;font-size:var(--kf,20px);font-weight:600;box-shadow:0 1px 0 rgba(0,0,0,.28);cursor:pointer;padding:0;min-width:0;min-height:0;touch-action:manipulation;-webkit-tap-highlight-color:transparent;transition:transform .05s,background .05s}\n.qcz .kp .kl button,.qcz .kp .kn button{height:100%}\n.qcz .kp .kn button{font-size:calc(var(--kf,20px) * 1.15)}\n.qcz .kp button.dn,.qcz .kp button:active{background:#9FB0BF;transform:scale(.94)}\n.qcz .kp .kn button.fn{background:#AEB7C0;font-size:var(--kf,20px)}\n.qcz .kp .kr{display:flex;gap:var(--kg,6px);justify-content:center;width:100%;max-width:var(--kw,1100px);margin:0 auto}\n.qcz .kp .kr button{flex:1 1 0;height:var(--kh,46px)}\n.qcz .kp .kr button.fn{background:#AEB7C0;font-size:calc(var(--kf,20px) * .8)}\n.qcz .kp .kr button.go{background:var(--accent);color:#fff;font-size:calc(var(--kf,20px) * .85)}\n.qcz .kp .kr button.go.dn{background:#14684B}\n.qcz .kp.numonly .kbody{grid-template-columns:minmax(0,1fr);max-width:var(--kwn,460px)}\n.qcz .kp.numonly .kn{padding-left:0;border-left:0;grid-template-rows:repeat(4,var(--kh,46px))}\n.qcz .kp.numonly .kr,.qcz .kp.numonly .kph{max-width:var(--kwn,460px)}\n.qcz .kp{z-index:9300}\n.qcz .modal{z-index:9350}\n.qcz .sigfs{z-index:9400}\n.qcz .sigfs{touch-action:none;overscroll-behavior:none;-webkit-user-select:none;user-select:none;-webkit-touch-callout:none}\n.qcz .sigfs .sgbtns .btn{touch-action:manipulation}\nhtml.qcsiglock,html.qcsiglock body{overscroll-behavior:none!important;overflow:hidden!important}\n.qcz .pdfv{z-index:9450}\n.qcz .pdfv .pvbar{flex-wrap:wrap}\n#qc-printpage{display:none}\n@media print{\n  body.qcprint>*:not(#qc-printpage){display:none!important}\n  body.qcprint::before{content:none!important;display:none!important}\n  body.qcprint #qc-printpage{display:block!important}\n  body.qcprint #qc-printpage img{display:block;width:210mm;height:297mm;object-fit:contain;page-break-after:always;break-after:page}\n  body.qcprint #qc-printpage img:last-child{page-break-after:auto;break-after:auto}\n}\n@media (pointer:coarse){.qcz input,.qcz select,.qcz textarea{font-size:16px!important}}\n.qcz .kp.vvfit{left:0;right:auto;bottom:auto;top:0;transform-origin:0 0}";
+QC_CSS += ".qcz tr.sub th.colh.ngh,.qcz table.ptab th.colh.ngh{color:var(--bad)}.qcz .pop button:disabled{opacity:.45;cursor:default}.qcz .flab{display:inline-flex;align-items:center;gap:6px;vertical-align:middle}.qcz .ficimg{width:1.25em;height:1.25em;object-fit:contain;display:block;flex:0 0 auto}.qcz .ficbig{width:48px;height:48px;object-fit:contain;border:1px solid var(--line2);border-radius:8px;background:#fff;padding:3px}.qcz .ftag .flab{gap:4px}.qcz .fsites{display:flex;flex-wrap:wrap;align-items:center;gap:6px 14px;font-size:14px}.qcz .fsites .fsl{font-weight:700;color:var(--ink2)}.qcz table.tf-sig{min-width:560px}.qcz table.tf-sig thead th{text-align:center}.qcz .ftag.sig{background:#FFF1DB;color:#8A5A00}.qcz table.mstab{table-layout:auto;min-width:0}.qcz .mstab td{overflow-wrap:anywhere;height:auto}.qcz .pdfv .pvbody{justify-content:flex-start}.qcz .pdfv .pvbody img{flex-shrink:0}.qcz .mstab td.nw{white-space:nowrap;overflow-wrap:normal}.qcz .mstab .msday{font:inherit;font-weight:800;color:var(--accent);background:none;border:0;padding:0;margin:0;cursor:pointer;text-decoration:underline dotted;text-underline-offset:3px;white-space:nowrap}.qcz .mstab .msday:hover{text-decoration-style:solid}.qcz .mstab .msday:focus-visible{outline:2px solid var(--accent);outline-offset:2px;border-radius:3px}.qcz .msum h4 .mshint{font-weight:400;color:var(--muted);font-size:13px;margin-left:6px}.qcz .dayv{position:fixed;inset:0;z-index:9450;background:rgba(15,25,22,.6);display:flex;align-items:center;justify-content:center;padding:16px}.qcz .daybox{background:#fff;border-radius:14px;width:min(980px,100%);max-height:calc(100vh - 32px);max-height:calc(100dvh - 32px);display:flex;flex-direction:column;overflow:hidden;box-shadow:0 10px 40px rgba(0,0,0,.3)}.qcz .dayhd{display:flex;align-items:center;gap:10px;padding:12px 16px;border-bottom:1px solid var(--line2);background:#F1F7F5}.qcz .dayhd b{margin-right:auto;font-size:17px}.qcz .dayhd .btn{padding:7px 14px;font-size:14px;white-space:nowrap;flex-shrink:0}.qcz .daybd{overflow:auto;padding:4px 16px 18px;-webkit-overflow-scrolling:touch}.qcz .daybd h4{margin:16px 0 6px;color:var(--accent);font-size:15px}.qcz .daybd .note{margin:6px 0}.qcz .daybd .mswrap{overflow-x:auto}.qcz .dayrec{display:flex;flex-wrap:wrap;align-items:center;gap:6px 10px;padding:7px 0;border-bottom:1px dashed var(--line2);font-size:14px}.qcz .dayrec:last-child{border-bottom:0}.qcz .dayrec span{margin-right:auto}.qcz .dayrec .btn{padding:5px 12px;font-size:13px}@media (max-width:640px){.qcz .mstab th{white-space:normal}.qcz table.mstab.mscard,.qcz .mstab.mscard tbody{display:block;border:0}.qcz .mstab.mscard thead{display:none}.qcz .mstab.mscard tr{display:block;border:1px solid var(--line2);border-radius:10px;margin:0 0 10px;padding:4px 12px;background:#fff}.qcz .mstab.mscard td{display:flex;gap:10px;align-items:flex-start;border:0;border-bottom:1px dashed #E3E9E7;padding:7px 0;line-height:1.45;min-width:0!important;text-align:left!important}.qcz .mstab.mscard td:last-child{border-bottom:0}.qcz .mstab.mscard td::before{content:attr(data-l);flex:0 0 7em;color:var(--muted);font-weight:700;font-size:13px;line-height:1.6}.qcz .dayhd{padding:10px 12px}.qcz .dayhd b{font-size:15px}.qcz .mstab.mscard td.emp{display:none}.qcz .dayv{padding:0;align-items:stretch}.qcz .daybox{border-radius:0;max-height:none;height:100%;width:100%}.qcz .daybd{padding:2px 12px 24px}}";
 function render() {
   kpClose();
   if (S.form === "pid") return renderPid();
@@ -548,8 +606,9 @@ function render() {
   $("#qc-send").textContent = S.edit ? "💾 存修改（PDF 重做）" : "✅ 送出（變成 PDF 保留）";
   $("#qc-clear").textContent = S.edit ? "取消修改" : "全部清掉";
   Array.prototype.forEach.call(document.querySelectorAll("#qc-site button"), function (x) { x.disabled = !!S.edit; });
+  var T = TF();
   P.appendChild(logoEl(C));
-  P.appendChild(el("h1", { text: TITLE }));
+  P.appendChild(el("h1", { text: T.title() }));
   var sig = el("div", { class: "sigbox" + (S.sig ? " done" : ""), role: "button", tabindex: "0", title: "點一下：電子簽名（簽完自動寫上今天的年月日、時間）" });
   if (S.sig) { sig.appendChild(S.sig.img ? el("img", { src: S.sig.img, alt: "簽名", draggable: "false" }) : el("span", { class: "ph", text: "✍️ 簽名在原本的 PDF 上" })); sig.appendChild(el("div", { class: "st" }, [el("div", { text: S.sig.who }), el("div", { text: S.sig.at })])); }
   else sig.appendChild(el("span", { class: "ph", text: "✍️ 點這裡電子簽名" }));
@@ -570,33 +629,32 @@ function render() {
   sig.onclick = function () { if (swiped) { swiped = false; return; } sgo(); }; sig.onkeydown = function (e) { if (e.key === "Enter") sgo(); };
   P.appendChild(el("div", { class: "signrow" }, [el("span", { class: "lb", text: "查檢者：" })].concat(ceFields(), [sig])));
   if (!TOUCH) P.appendChild(kbdHint());
-  var tb = el("table", { "aria-label": TITLE });
-  var cg = el("colgroup"); [10.5, 9, 7, 7, 7, 17, 7, 7, 28.5].forEach(function (w) { cg.appendChild(el("col", { style: "width:" + w + "%" })); }); tb.appendChild(cg);
-  var th = el("thead"), tr0 = el("tr");
-  tr0.appendChild(el("th", { colspan: "3", class: "diag", text: "查檢項目" }));
-  tr0.appendChild(el("th", { colspan: "3", text: ITEMS[0] }));
-  tr0.appendChild(el("th", { colspan: "3", text: ITEMS[1] }));
+  var tb = el("table", { "aria-label": T.title(), class: "tf-" + S.form });
+  var cg = el("colgroup"); T.w.forEach(function (w) { cg.appendChild(el("col", { style: "width:" + w + "%" })); }); tb.appendChild(cg);
+  var th = el("thead"), tr0 = el("tr"), IT = T.items();
+  tr0.appendChild(el("th", { colspan: String(T.grp[0]), class: T.diag ? "diag" : null, text: "查檢項目" }));
+  tr0.appendChild(el("th", { colspan: String(T.grp[1] - T.grp[0]), text: IT[0] }));
+  tr0.appendChild(el("th", { colspan: String(T.grp[2] - T.grp[1]), text: IT[1] }));
   th.appendChild(tr0); tb.appendChild(th);
   var idx = 0;
-  for (var s = 0; s < C.secs; s++) {
+  for (var s = 0; s < T.secs(C); s++) {
     var body = el("tbody", { class: "sec" });
     var hr = el("tr", { class: "sub" + (s ? " thick" : "") });
-    ["日期", "領藥號", "筆數", "符合", "不符", "不符事項", "符合", "不符", "不符事項"].forEach(function (t, c) {
+    T.heads.forEach(function (t, c) {
       var th = el("th", { scope: "col", text: t });
-      if (c === 3 || c === 6) {
-        var k = c === 3 ? "a" : "b";
-        th.className = "colh"; th.tabIndex = 0; th.title = "點一下：整欄打勾（第 " + (k === "a" ? 1 : 2) + " 項，整張表）";
-        th.onclick = (function (kk, el0) { return function (e) { colPop(el0, kk); e.stopPropagation(); }; })(k, th);
-        th.onkeydown = (function (kk, el0) { return function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); colPop(el0, kk); } }; })(k, th);
+      if (/^[ab][+-]$/.test(T.cols[c])) {
+        var k = T.cols[c][0], v = T.cols[c][1] === "+" ? "ok" : "ng";
+        th.className = "colh" + (v === "ng" ? " ngh" : ""); th.tabIndex = 0; th.title = "點一下：全部" + (v === "ok" ? "符合" : "不符") + "／取消勾選（第 " + (k === "a" ? 1 : 2) + " 項）";
+        th.onclick = (function (kk, vv, el0) { return function (e) { colPop(el0, kk, vv); e.stopPropagation(); }; })(k, v, th);
+        th.onkeydown = (function (kk, vv, el0) { return function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); colPop(el0, kk, vv); } }; })(k, v, th);
       }
       hr.appendChild(th);
     });
     body.appendChild(hr);
-    for (var r = 0; r < C.rows; r++) body.appendChild(rowEl(idx++));
+    for (var r = 0; r < T.rows(C); r++) body.appendChild(rowEl(idx++));
     tb.appendChild(body);
   }
   P.appendChild(el("div", { class: "tscroll" }, [tb]));
-  P.appendChild(attBox("bag"));
 }
 var TOUCH = !!(window.matchMedia && matchMedia("(pointer:coarse)").matches);
 function codeChar(e) { var c = e.code || ""; if (/^Key[A-Z]$/.test(c)) return c.slice(3); if (/^(Digit|Numpad)[0-9]$/.test(c)) return c.slice(-1); if (c === "Minus" || c === "NumpadSubtract") return "-"; return ""; }
@@ -695,15 +753,26 @@ function kpOpen(inp, d, i, o) {
   if (r.bottom > top - 8) window.scrollBy(0, r.bottom - top + 24);
 }
 function rowEl(i) {
-  var d = R(i), tr = el("tr", { "data-i": String(i) });
-  var dt = el("td", { class: "dt", title: "點一下：自己填入／選日期／同上" }, [el("span", { text: d.d })]);
-  dt.onclick = function (e) { datePop(dt, i); e.stopPropagation(); };
-  tr.appendChild(dt);
-  [["no", "領藥號"], ["n", "筆數"]].forEach(function (f) {
+  var T = TF(), d = R(i), tr = el("tr", { "data-i": String(i) });
+  var LBL = { no: "領藥號", n: "筆數" };
+  T.cols.forEach(function (col) {
+    if (col === "d") {
+      var dt = el("td", { class: "dt", title: "點一下：自己填入／選日期／同上" }, [el("span", { text: d.d })]);
+      dt.onclick = function (e) { datePop(dt, i); e.stopPropagation(); };
+      tr.appendChild(dt); return;
+    }
+    if (col === "no" || col === "n") { rowInp(tr, d, i, [col, LBL[col]], T); return; }
+    if (/^[ab][+-]$/.test(col)) { rowChk(tr, d, i, col[0], col[1] === "+" ? "ok" : "ng"); return; }
+    rowMemo(tr, d, i, col[0]);
+  });
+  return tr;
+}
+function rowInp(tr, d, i, f, T) {
     var isNo = f[0] === "no";
     var inp = el("input", { value: d[f[0]], "aria-label": "第 " + (i + 1) + " 列 " + f[1], inputmode: isNo ? (TOUCH ? "none" : "text") : "numeric", autocapitalize: isNo ? "characters" : null, autocorrect: isNo ? "off" : null, lang: isNo ? "en" : null, autocomplete: "off", spellcheck: "false", maxlength: isNo ? "16" : "4", placeholder: isNo ? "" : "" });
     var en = isNo ? noEnglish(inp, d) : null;
-    if (isNo && TOUCH) { inp.addEventListener("focus", function () { kpOpen(inp, d, i); }); inp.addEventListener("click", function () { if (!KP) kpOpen(inp, d, i); }); inp.addEventListener("blur", function () { setTimeout(function () { if (KP && KP.inp === inp && document.activeElement !== inp) kpClose(); }, 0); }); }
+    var kpo = function () { return T.n ? undefined : { title: "⌨ 英數鍵盤・第 " + (i + 1) + " 列 領藥號：", letters: true, sym: "-", max: 16, next: document.querySelector("tr[data-i='" + (i + 1) + "'] input"), nextLabel: "下一列（領藥號）" }; };
+    if (isNo && TOUCH) { inp.addEventListener("focus", function () { kpOpen(inp, d, i, kpo()); }); inp.addEventListener("click", function () { if (!KP) kpOpen(inp, d, i, kpo()); }); inp.addEventListener("blur", function () { setTimeout(function () { if (KP && KP.inp === inp && document.activeElement !== inp) kpClose(); }, 0); }); }
     inp.oninput = function () {
       if (en && en.comp()) return;
       var v = inp.value.replace(/[\uFF01-\uFF5E]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); });
@@ -712,19 +781,17 @@ function rowEl(i) {
       d[f[0]] = v; if (en) en.sync(v);
     };
     tr.appendChild(el("td", {}, [inp]));
-  });
-  ["a", "b"].forEach(function (k) {
-    ["ok", "ng"].forEach(function (v) {
+}
+function rowChk(tr, d, i, k, v) {
       var c = el("td", { class: "c" + (d[k] === v ? " on" + (v === "ng" ? " badc" : "") : ""), "data-k": k, "data-v": v, role: "checkbox", "aria-checked": String(d[k] === v), tabindex: "0", "aria-label": "第 " + (i + 1) + " 列 第 " + (k === "a" ? 1 : 2) + " 項 " + (v === "ok" ? "符合" : "不符"), text: d[k] === v ? "✔" : "" });
-      c.onclick = function (e) { e.stopPropagation(); popClose(); setChk(i, k, d[k] === v ? "" : v); if (d[k] !== "ng") bagFocus(i, k, v); };
+      c.onclick = function (e) { e.stopPropagation(); popClose(); setChk(i, k, d[k] === v ? "" : v); if (d[k] !== "ng" || !TF().memo) bagFocus(i, k, v); };
       c.onkeydown = function (e) { bagKey(e, i, k, v); };
       tr.appendChild(c);
-    });
+}
+function rowMemo(tr, d, i, k) {
     var m = el("input", { value: d[k + "m"], "aria-label": "第 " + (i + 1) + " 列 第 " + (k === "a" ? 1 : 2) + " 項 不符事項", placeholder: d[k] === "ng" ? "請寫不符事項" : "" });
     m.oninput = function () { d[k + "m"] = m.value; m.parentNode.classList.toggle("need", d[k] === "ng" && !m.value.trim()); };
     tr.appendChild(el("td", { class: "memo" + (d[k] === "ng" && !d[k + "m"].trim() ? " need" : "") }, [m]));
-  });
-  return tr;
 }
 var BAGC = [["a", "ok"], ["a", "ng"], ["b", "ok"], ["b", "ng"]];
 function pasteBox(label, got) {
@@ -744,11 +811,11 @@ function kbdHint() { return el("div", { class: "kbdh note", text: "⌨ 點一格
 function bagFocus(i, k, v) { var x = document.querySelector("tr[data-i='" + i + "'] td.c[data-k='" + k + "'][data-v='" + v + "']"); if (x) { x.focus(); try { x.scrollIntoView({ block: "nearest" }); } catch (e) {  } } return !!x; }
 function keyOf(e) { if (e.ctrlKey || e.metaKey || e.altKey) return ""; var c = e.code || ""; if (c === "KeyY") return "y"; if (c === "KeyN") return "n"; return String(e.key || "").toLowerCase(); }
 function bagKey(e, i, k, v) {
-  var d = R(i), q = keyOf(e), n = SITES[S.site].secs * SITES[S.site].rows, ci = 0;
+  var d = R(i), q = keyOf(e), n = NR(), ci = 0;
   BAGC.forEach(function (x, z) { if (x[0] === k && x[1] === v) ci = z; });
   if (q === " " || q === "enter") { e.preventDefault(); setChk(i, k, d[k] === v ? "" : v); if (d[k] !== "ng") bagFocus(i, k, v); }
   else if (q === "y") { e.preventDefault(); setChk(i, k, "ok"); if (!bagFocus(i + 1, k, "ok")) bagFocus(i, k, "ok"); }
-  else if (q === "n") { e.preventDefault(); setChk(i, k, "ng"); }
+  else if (q === "n") { e.preventDefault(); setChk(i, k, "ng"); if (!TF().memo && !bagFocus(i + 1, k, "ok")) bagFocus(i, k, "ng"); }
   else if (q === "delete" || q === "backspace") { e.preventDefault(); d[k] = ""; d[k + "m"] = ""; redrawRow(i); bagFocus(i, k, v); }
   else if (q === "arrowdown" && i + 1 < n) { e.preventDefault(); bagFocus(i + 1, k, v); }
   else if (q === "arrowup" && i > 0) { e.preventDefault(); bagFocus(i - 1, k, v); }
@@ -756,7 +823,7 @@ function bagKey(e, i, k, v) {
   else if (q === "arrowleft" && ci > 0) { e.preventDefault(); bagFocus(i, BAGC[ci - 1][0], BAGC[ci - 1][1]); }
 }
 function redrawRow(i) { var old = document.querySelector("tr[data-i='" + i + "']"); if (old) old.parentNode.replaceChild(rowEl(i), old); }
-function setChk(i, k, v) { R(i)[k] = v; redrawRow(i); if (v === "ng") { var m = document.querySelector("tr[data-i='" + i + "'] td.memo:nth-of-type(" + (k === "a" ? 6 : 9) + ") input"); if (m) m.focus(); } }
+function setChk(i, k, v) { R(i)[k] = v; redrawRow(i); if (v === "ng" && TF().memo) { var m = document.querySelector("tr[data-i='" + i + "'] td.memo:nth-of-type(" + (k === "a" ? 6 : 9) + ") input"); if (m) m.focus(); } }
 
 var POP = null;
 function popClose() { if (POP) { if (KP && POP.contains(KP.inp)) kpClose(); POP.remove(); POP = null; } }
@@ -785,15 +852,21 @@ function normDate(s) {
   m = /^(\d{4})(\d{2})(\d{2})$/.exec(s); if (m) return m[1] + "/" + m[2] + "/" + m[3];
   return s;
 }
-function colPop(th, k) {
-  var C = SITES[S.site], n = C.secs * C.rows, ng = 0, okN = 0;
-  for (var i = 0; i < n; i++) { if (R(i)[k] === "ng") ng++; else if (R(i)[k] === "ok") okN++; }
-  var no = k === "a" ? "1" : "2";
-  var all = el("button", { type: "button", class: "pri colall", text: "✔ 整欄打勾（第 " + no + " 項，整張表 " + n + " 列）" });
-  var off = el("button", { type: "button", class: "coloff", text: "✕ 拿掉整欄的勾（不符不動）" });
-  popAt(th, [el("div", { class: "t", text: "第 " + no + " 項・符合" + (ng ? "（不符的 " + ng + " 列不會動）" : "") }), all, okN ? off : null]);
-  all.onclick = function () { popClose(); for (var i = 0; i < n; i++) if (R(i)[k] !== "ng") R(i)[k] = "ok"; render(); toast("第 " + no + " 項：整欄打勾" + (ng ? "（不符的 " + ng + " 列沒動）" : "")); };
-  off.onclick = function () { popClose(); for (var i = 0; i < n; i++) if (R(i)[k] === "ok") R(i)[k] = ""; render(); toast("第 " + no + " 項：拿掉整欄的勾"); };
+function colPop(th, k, v) {
+  v = v === "ng" ? "ng" : "ok";
+  var n = NR(), oth = v === "ok" ? "ng" : "ok", nm = v === "ok" ? "符合" : "不符", no = k === "a" ? "1" : "2", T = TF(), on = 0, ot = 0, tgt = [];
+  for (var i = 0; i < n; i++) { var d = R(i); if (d[k] === v) on++; else if (d[k] === oth) ot++; if (v === "ok" || d.d || d.no || d.n) tgt.push(i); }
+  var all = el("button", { type: "button", class: "pri colall", text: "✔ 全部" + nm + "（第 " + no + " 項，" + (v === "ok" ? "整張表 " + n + " 列" : "有填日期／領藥號的 " + tgt.length + " 列") + "）" });
+  var off = el("button", { type: "button", class: "coloff", text: "✕ 取消勾選（拿掉第 " + no + " 項所有的「" + nm + "」，" + on + " 列）" });
+  popAt(th, [el("div", { class: "t", text: "第 " + no + " 項・" + nm + (ot ? "（勾了「" + (v === "ok" ? "不符" : "符合") + "」的 " + ot + " 列不會動）" : "") }), all, off]);
+  if (!tgt.length) all.disabled = true;
+  if (!on) off.disabled = true;
+  all.onclick = function () {
+    popClose(); var c = 0;
+    tgt.forEach(function (i) { var d = R(i); if (d[k] !== oth) { d[k] = v; c++; } });
+    render(); toast("第 " + no + " 項：全部" + nm + "（" + c + " 列）" + (v === "ng" && T.memo ? "，記得寫不符事項" : ""));
+  };
+  off.onclick = function () { popClose(); for (var i = 0; i < n; i++) if (R(i)[k] === v) R(i)[k] = ""; render(); toast("第 " + no + " 項：「" + nm + "」的勾都取消了"); };
 }
 function rowUsed(d) { return !!(d.d || d.no || d.n || d.a === "ng" || d.b === "ng" || (d.am || "").trim() || (d.bm || "").trim()); }
 function chkPop(td, i, k, v) {
@@ -924,17 +997,17 @@ function signOpen(thenSend, o) {
 }
 
 function check() {
-  var C = SITES[S.site], n = C.secs * C.rows, used = 0, bad = [], ngs = [];
+  var T = TF(), n = NR(), used = 0, bad = [], ngs = [];
   for (var i = 0; i < n; i++) {
     var d = R(i), any = rowUsed(d);
     if (!any) continue;
     used++;
     var miss = [];
-    if (!d.d) miss.push("日期"); if (!d.no) miss.push("領藥號"); if (!d.n) miss.push("筆數");
+    if (!d.d) miss.push("日期"); if (!d.no) miss.push("領藥號"); if (T.n && !d.n) miss.push("筆數");
     if (!d.a) miss.push("第 1 項符合／不符"); if (!d.b) miss.push("第 2 項符合／不符");
-    if (d.a === "ng" && !d.am.trim()) miss.push("第 1 項的不符事項"); if (d.b === "ng" && !d.bm.trim()) miss.push("第 2 項的不符事項");
+    if (T.memo && d.a === "ng" && !(d.am || "").trim()) miss.push("第 1 項的不符事項"); if (T.memo && d.b === "ng" && !(d.bm || "").trim()) miss.push("第 2 項的不符事項");
     if (miss.length) bad.push("第 " + (i + 1) + " 列：還沒填 " + miss.join("、"));
-    if (d.a === "ng" || d.b === "ng") ngs.push("第 " + (i + 1) + " 列（" + (d.no || "沒寫領藥號") + "）：" + [d.a === "ng" ? "列印品質：" + (d.am || "—") : "", d.b === "ng" ? "調劑品質：" + (d.bm || "—") : ""].filter(Boolean).join("；"));
+    if (d.a === "ng" || d.b === "ng") ngs.push("第 " + (i + 1) + " 列（" + (d.no || "沒寫領藥號") + "）：" + [d.a === "ng" ? T.ng[0] + (T.memo ? "：" + (d.am || "—") : " 不符") : "", d.b === "ng" ? T.ng[1] + (T.memo ? "：" + (d.bm || "—") : " 不符") : ""].filter(Boolean).join("；"));
   }
   if (!S.edit && !ceReady()) bad.unshift("查檢者的" + (!S.ce.emp ? "員工編號" : "姓名") + "還沒打");
   if (!used) bad.unshift("還沒有填任何一列");
@@ -945,16 +1018,16 @@ function doSend() {
   if (Q.sending) return;
   var r = check(), m = $("#qc-msg"); m.innerHTML = "";
   if (r.bad.length) { m.appendChild(el("div", { class: "bad", text: "⚠️ 還不能送出：" })); r.bad.slice(0, 8).forEach(function (s) { m.appendChild(el("div", { class: "bad", text: "・" + s })); }); return; }
-  var C = SITES[S.site], rows = [];
-  for (var i = 0; i < C.secs * C.rows; i++) rows.push(JSON.parse(JSON.stringify(R(i))));
+  var rows = [], fm = S.form;
+  for (var i = 0; i < NR(); i++) rows.push(JSON.parse(JSON.stringify(R(i))));
   if (S.edit) {
     var E = S.edit;
     if (!canEdit(E)) { m.appendChild(el("div", { class: "bad", text: isLocked(mkey(E.at)) ? "🔒 這個月已經鎖住了，只能查閱，不能存修改。" : "⚠️ 你沒有「編輯修改」的權限（開發者在設定裡勾）。" })); return; }
-    saveEdit(E, { form: "bag", site: E.site, at: E.at, rows: rows, sig: E.sig, edits: E.edits, att: attOf("bag").slice() }, { rows: rows, sig: noImgSig(E.sig) });
+    saveEdit(E, { form: fm, site: E.site, at: E.at, rows: rows, sig: E.sig, edits: E.edits, att: attOf(fm).slice() }, { rows: rows, sig: noImgSig(E.sig) });
     return;
   }
   var sg = S.sig || { who: ceWho(), at: "", none: 1 };
-  submitNew({ form: "bag", site: S.site, rows: rows, sig: sg, ce: { emp: S.ce.emp, name: S.ce.name }, at: new Date(), att: attOf("bag").slice() }, { rows: rows, sig: noImgSig(sg) });
+  submitNew({ form: fm, site: S.site, rows: rows, sig: sg, ce: { emp: S.ce.emp, name: S.ce.name }, at: new Date(), att: attOf(fm).slice() }, { rows: rows, sig: noImgSig(sg) });
 }
 function busyMsg(t) { var m = $("#qc-msg"); m.innerHTML = ""; m.appendChild(el("div", { class: "okm", text: t })); }
 function failMsg(e) { var m = $("#qc-msg"); m.innerHTML = ""; m.appendChild(el("div", { class: "bad", text: "⚠️ 沒有存好：" + errText(e) + "（表格、簽名都還在，網路好了再按一次）" })); }
@@ -977,7 +1050,8 @@ function submitNew(rec, data) {
     m.appendChild(el("div", { class: "okm drv", text: "☁ 存在雲端硬碟：" + (x.path || x.file) }));
     var b = el("button", { type: "button", class: "btn", text: "👀 看這一份 PDF" }); b.onclick = function () { showPdf(nr); }; m.appendChild(b);
     var bp = el("button", { type: "button", class: "btn", style: "margin-left:8px", text: "🖨 列印" }); bp.onclick = function () { printRecs([nr]); }; m.appendChild(bp);
-    showPdf(nr);
+    toast("✅ 送出了，可以填下一張");
+    try { window.scrollTo({ top: 0, behavior: "smooth" }); } catch (e) { window.scrollTo(0, 0); }
   }, function (e) { sendBtns(false); failMsg(e); });
 }
 function wipeSigs(rec) {
@@ -996,7 +1070,7 @@ function saveEdit(E, rec, data) {
     sendBtns(false);
     var nr = mkRec(x.rec); nr.pdf = rec.pdf; nr.pngs = rec.pngs; nr.png = rec.png; nr.file = x.file;
     if (Q.list) Q.list = Q.list.map(function (r) { return r.id === nr.id ? nr : r; });
-    S.edit = null; loadSite(S.site); render();
+    S.edit = null; loadSite(S.site); siteFix(); renderSiteBtns(); render();
     var m = $("#qc-msg"); m.innerHTML = "";
     var last = nr.edits[nr.edits.length - 1];
     m.appendChild(el("div", { class: "okm", text: "💾 存好了：PDF 重做（第 " + nr.edits.length + " 次修改，記下 " + (last ? last.who + "、" + fmtAt(last.at) : me()) + "）；舊的那一份留著（開發者看得到）。" }));
@@ -1006,13 +1080,14 @@ function saveEdit(E, rec, data) {
 }
 var A4 = { w: 1240, h: 1754 };
 function loadImg(src) { return new Promise(function (ok) { if (!src) { ok(null); return; } var im = new Image(); im.onload = function () { ok(im); }; im.onerror = function () { ok(null); }; im.src = src; }); }
+function wrapLines(g, t, w) { var out = [], line = ""; Array.from(String(t || "")).forEach(function (ch) { if (line && g.measureText(line + ch).width > w) { out.push(line); line = ch; } else line += ch; }); if (line) out.push(line); return out; }
 function drawForm(rec, prev) {
-  var C = SITES[rec.site], cv = document.createElement("canvas"); cv.width = A4.w; cv.height = A4.h;
+  var T = TF(rec.form), C = SITES[rec.site], cv = document.createElement("canvas"); cv.width = A4.w; cv.height = A4.h;
   var g = cv.getContext("2d"), F = "'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif";
   g.fillStyle = "#fff"; g.fillRect(0, 0, A4.w, A4.h); g.fillStyle = "#111"; g.strokeStyle = "#111"; g.textBaseline = "middle";
   var L = 70, Rr = A4.w - 70, y = 70;
   drawLogo(g, C, L, y, F);
-  y += 100; g.fillStyle = "#111"; g.textAlign = "center"; fitText(g, TITLE, A4.w / 2, y, A4.w - 140, 40, "900", F);
+  y += 100; g.fillStyle = "#111"; g.textAlign = "center"; fitText(g, T.title(), A4.w / 2, y, A4.w - 140, 40, "900", F);
   return Promise.all([loadImg(rec.sig && rec.sig.img), loadImg(!(rec.sig && rec.sig.img) && prev)]).then(function (two) {
     var im = two[0], old = two[1];
     y += 56; g.textAlign = "right"; g.font = "800 26px " + F;
@@ -1025,34 +1100,67 @@ function drawForm(rec, prev) {
     else if (old) g.drawImage(old, Rr - 286, y - 4, 146, 62, Rr - 286, y - 4, 146, 62);
     g.textAlign = "left"; g.font = "15px " + F; g.fillStyle = "#333"; g.fillText(rec.sig ? rec.sig.who : "", Rr - 138, y + 12); g.fillText(rec.sig ? rec.sig.at || (im || old ? "" : "（沒有簽名）") : "", Rr - 138, y + 38);
     y += 78;
-    var W = [10.5, 9, 7, 7, 7, 17, 7, 7, 28.5], tw = Rr - L, xs = [L]; W.forEach(function (w) { xs.push(xs[xs.length - 1] + tw * w / 100); });
-    var nRows = C.secs * (C.rows + 1), hh = Math.min(48, Math.floor((A4.h - 80 - y - 130) / nRows));
+    var W = T.w, tw = Rr - L, xs = [L], G = T.grp, HH = T.hdrH, IT = T.items(); W.forEach(function (w) { xs.push(xs[xs.length - 1] + tw * w / 100); });
+    var nRows = T.secs(C) * (T.rows(C) + 1), hh = Math.min(T.maxH, Math.floor((A4.h - 80 - y - HH) / nRows));
     g.strokeStyle = "#111"; g.lineWidth = 2;
-    g.strokeRect(L, y, tw, 130); g.beginPath(); g.moveTo(xs[3], y); g.lineTo(xs[3], y + 130); g.moveTo(xs[6], y); g.lineTo(xs[6], y + 130); g.stroke();
-    g.strokeStyle = "#3B82C4"; g.lineWidth = 1; g.beginPath(); g.moveTo(L, y); g.lineTo(xs[3], y + 130); g.stroke(); g.strokeStyle = "#111"; g.lineWidth = 2;
-    g.font = "900 26px " + F; g.textAlign = "right"; g.fillStyle = "#111"; g.fillText("查檢項目", xs[3] - 18, y + 65);
+    g.strokeRect(L, y, tw, HH); g.beginPath(); g.moveTo(xs[G[0]], y); g.lineTo(xs[G[0]], y + HH); g.moveTo(xs[G[1]], y); g.lineTo(xs[G[1]], y + HH); g.stroke();
+    if (T.diag) { g.strokeStyle = "#3B82C4"; g.lineWidth = 1; g.beginPath(); g.moveTo(L, y); g.lineTo(xs[G[0]], y + HH); g.stroke(); g.strokeStyle = "#111"; g.lineWidth = 2; }
+    g.font = "900 26px " + F; g.fillStyle = "#111";
+    if (T.diag) { g.textAlign = "right"; g.fillText("查檢項目", xs[G[0]] - 18, y + HH / 2); } else { g.textAlign = "center"; g.fillText("查檢項目", (L + xs[G[0]]) / 2, y + HH / 2); }
     var wrap = function (t, x, yy, w, lh) { var line = "", ly = yy; Array.from(t).forEach(function (ch) { if (g.measureText(line + ch).width > w) { g.fillText(line, x, ly); line = ch; ly += lh; } else line += ch; }); g.fillText(line, x, ly); };
-    g.textAlign = "left"; g.font = "800 23px " + F; wrap(ITEMS[0], xs[3] + 12, y + 26, xs[6] - xs[3] - 24, 36); wrap(ITEMS[1], xs[6] + 12, y + 26, Rr - xs[6] - 24, 36);
-    y += 130;
+    if (T.memo) { g.textAlign = "left"; g.font = "800 23px " + F; wrap(IT[0], xs[G[0]] + 12, y + 26, xs[G[1]] - xs[G[0]] - 24, 36); wrap(IT[1], xs[G[1]] + 12, y + 26, xs[G[2]] - xs[G[1]] - 24, 36); }
+    else { g.textAlign = "center"; fitText(g, IT[0], (xs[G[0]] + xs[G[1]]) / 2, y + HH / 2, xs[G[1]] - xs[G[0]] - 20, 28, "900", F); fitText(g, IT[1], (xs[G[1]] + xs[G[2]]) / 2, y + HH / 2, xs[G[2]] - xs[G[1]] - 20, 28, "900", F); }
+    y += HH;
+    var VAL = function (d, col) {
+      if (/^[ab][+-]$/.test(col)) { var on = d[col[0]] === (col[1] === "+" ? "ok" : "ng"); return on ? ["✔", col[1] === "+" ? "#15803D" : "#B91C1C"] : [""]; }
+      return [d[col] || ""];
+    };
+    var avail = A4.h - 80 - y, nS = T.secs(C), nR = T.rows(C), DATA = [], base = Math.min(T.memo ? 19 : 22, hh * .46);
+    var fit = function (t, w, h, minF) {
+      for (var f = Math.floor(base); f >= minF; f--) { g.font = f + "px " + F; var ls = wrapLines(g, t, w); if (ls.length * f * 1.25 + 8 <= h) return { f: f, ls: ls, h: h }; }
+      g.font = minF + "px " + F; var l2 = wrapLines(g, t, w); return { f: minF, ls: l2, h: Math.ceil(l2.length * minF * 1.25 + 10) };
+    };
+    for (var q = 0; q < nS * nR; q++) {
+      var d0 = rec.rows[q] || {}, mm = {}, rh0 = hh;
+      T.cols.forEach(function (col, k) { if ((col === "am" || col === "bm") && String(d0[col] || "").trim()) { var o = fit(String(d0[col]).replace(/\s+/g, " ").trim(), xs[k + 1] - xs[k] - 12, hh, 15); mm[k] = o; rh0 = Math.max(rh0, o.h); } });
+      DATA.push({ d: d0, mm: mm, h: rh0, big: rh0 > hh });
+    }
+    var tot = function () { return nS * hh + DATA.reduce(function (a, r) { return a + r.h; }, 0); };
+    if (tot() > avail) {
+      var over = tot() - avail, room = DATA.reduce(function (a, r) { return a + (r.big ? 0 : hh - 26); }, 0);
+      if (room > 0) { var cut = Math.min(1, over / room); DATA.forEach(function (r) { if (!r.big) r.h = hh - (hh - 26) * cut; }); }
+    }
+    var total = tot(), sc = total > avail ? avail / total : 1, tg = g, ty0 = y, tc = null;
+    if (sc < 1) { tc = document.createElement("canvas"); tc.width = A4.w; tc.height = Math.ceil(total) + 8; tg = tc.getContext("2d"); tg.fillStyle = "#fff"; tg.fillRect(0, 0, tc.width, tc.height); tg.textBaseline = "middle"; tg.strokeStyle = "#111"; y = 2; }
     var idx = 0;
-    for (var sct = 0; sct < C.secs; sct++) {
-      g.lineWidth = 3; g.beginPath(); g.moveTo(L, y); g.lineTo(Rr, y); g.stroke(); g.lineWidth = 1.5;
-      g.font = "800 " + Math.min(20, hh * .5) + "px " + F; g.textAlign = "center";
-      ["日期", "領藥號", "筆數", "符合", "不符", "不符事項", "符合", "不符", "不符事項"].forEach(function (t, k) { g.fillText(t, (xs[k] + xs[k + 1]) / 2, y + hh / 2); });
-      g.strokeRect(L, y, tw, hh); xs.slice(1, -1).forEach(function (x) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + hh); g.stroke(); });
+    for (var sct = 0; sct < nS; sct++) {
+      tg.lineWidth = 3; tg.beginPath(); tg.moveTo(L, y); tg.lineTo(Rr, y); tg.stroke(); tg.lineWidth = 1.5;
+      tg.font = "800 " + Math.min(T.memo ? 20 : 24, hh * .5) + "px " + F; tg.textAlign = "center"; tg.fillStyle = "#111";
+      T.heads.forEach(function (t, k) { tg.fillText(t, (xs[k] + xs[k + 1]) / 2, y + hh / 2); });
+      tg.strokeRect(L, y, tw, hh); xs.slice(1, -1).forEach(function (x) { tg.beginPath(); tg.moveTo(x, y); tg.lineTo(x, y + hh); tg.stroke(); });
       y += hh;
-      for (var rr = 0; rr < C.rows; rr++) {
-        var d = rec.rows[idx++] || {};
-        g.strokeRect(L, y, tw, hh); xs.slice(1, -1).forEach(function (x) { g.beginPath(); g.moveTo(x, y); g.lineTo(x, y + hh); g.stroke(); });
-        g.font = Math.min(19, hh * .46) + "px " + F; g.fillStyle = "#111"; g.textAlign = "center";
-        var cell = function (k, t, col) { if (!t) return; g.fillStyle = col || "#111"; var w = xs[k + 1] - xs[k] - 10, s = t; while (g.measureText(s).width > w && s.length > 1) s = s.slice(0, -1); g.fillText(s === t ? s : s.slice(0, -1) + "…", (xs[k] + xs[k + 1]) / 2, y + hh / 2); };
-        cell(0, d.d); cell(1, d.no); cell(2, d.n);
-        cell(3, d.a === "ok" ? "✔" : "", "#15803D"); cell(4, d.a === "ng" ? "✔" : "", "#B91C1C"); cell(5, d.am, "#B91C1C");
-        cell(6, d.b === "ok" ? "✔" : "", "#15803D"); cell(7, d.b === "ng" ? "✔" : "", "#B91C1C"); cell(8, d.bm, "#B91C1C");
-        y += hh;
+      for (var rr = 0; rr < nR; rr++) {
+        var R0 = DATA[idx++], d = R0.d, h = R0.h, fs = Math.min(base, h * .46);
+        tg.strokeRect(L, y, tw, h); xs.slice(1, -1).forEach(function (x) { tg.beginPath(); tg.moveTo(x, y); tg.lineTo(x, y + h); tg.stroke(); });
+        T.cols.forEach(function (col, k) {
+          var mo = R0.mm[k];
+          if (mo) {
+            tg.font = mo.f + "px " + F; tg.fillStyle = "#B91C1C";
+            var lh = mo.f * 1.25, y1 = y + h / 2 - (mo.ls.length - 1) * lh / 2, one = mo.ls.length === 1;
+            tg.textAlign = one ? "center" : "left";
+            mo.ls.forEach(function (t, j) { tg.fillText(t, one ? (xs[k] + xs[k + 1]) / 2 : xs[k] + 6, y1 + j * lh); });
+            return;
+          }
+          var v = VAL(d, col); if (!v[0]) return;
+          tg.font = fs + "px " + F; tg.fillStyle = v[1] || "#111"; tg.textAlign = "center";
+          var w = xs[k + 1] - xs[k] - 10, t = v[0], s2 = t; while (tg.measureText(s2).width > w && s2.length > 1) s2 = s2.slice(0, -1);
+          tg.fillText(s2 === t ? s2 : s2.slice(0, -1) + "…", (xs[k] + xs[k + 1]) / 2, y + h / 2);
+        });
+        y += h;
       }
     }
-    g.lineWidth = 3; g.beginPath(); g.moveTo(L, y); g.lineTo(Rr, y); g.stroke();
+    tg.lineWidth = 3; tg.beginPath(); tg.moveTo(L, y); tg.lineTo(Rr, y); tg.stroke();
+    if (tc) { var th = y + 4, dw = (tw + 4) * sc; g.drawImage(tc, L - 2, 0, tw + 4, th, L - 2 + (tw + 4 - dw) / 2, ty0, dw, th * sc); y = ty0 + th * sc; }
     g.font = "15px " + F; g.fillStyle = "#666"; g.textAlign = "right"; g.fillText("送出：" + fmtAt(rec.at) + "（電子查檢表）", Rr, A4.h - 50);
     var ed = rec.edits || [];
     if (ed.length) { var last = ed[ed.length - 1]; g.fillStyle = "#8A5A00"; g.textAlign = "left"; g.fillText("修改：" + last.who + "　" + fmtAt(last.at) + "（共 " + ed.length + " 次）", L, A4.h - 50); }
@@ -1130,19 +1238,26 @@ function save(blob, name) {
 }
 var YN = { ok: "符合", ng: "不符" };
 function yearXlsx(y) {
-  var list = yearRecs(y), st = [["月份", "份數", "藥袋（份）", "病人辨識（份）", "填的列數／段數", "不符（筆）", "有不符的份數", "不符率", "鎖住了嗎"]], pd = [["月份", "送出時間", "院區", "第幾段", "查檢對象員工編號", "查檢對象", "日期", "上／下午", "查檢者"].concat(PID_ITEMS.map(function (t, j) { return "第 " + (j + 1) + " 項"; }), ["備註", "修改紀錄"])], det = [["月份", "送出時間", "院區", "查檢者", "第幾列", "日期", "領藥號", "筆數", "藥袋列印品質", "不符事項", "藥袋調劑品質", "不符事項", "修改紀錄"]];
-  var tot = [0, 0, 0, 0, 0, 0];
+  var list = yearRecs(y), sd = [["月份", "送出時間", "院區", "查檢者", "第幾列", "日期", "領藥號", "醫師簽章", "藥師簽章", "修改紀錄"]], st = [["月份", "份數", "藥袋（份）", "病人辨識（份）", "處方簽章（份）", "填的列數／段數", "不符（筆）", "有不符的份數", "不符率"]], pd = [["月份", "送出時間", "院區", "第幾段", "查檢對象員工編號", "查檢對象", "日期", "上／下午", "查檢者"].concat(PID_ITEMS.map(function (t, j) { return "第 " + (j + 1) + " 項"; }), ["備註", "修改紀錄"])], det = [["月份", "送出時間", "院區", "查檢者", "第幾列", "日期", "領藥號", "筆數", "藥袋列印品質", "不符事項", "藥袋調劑品質", "不符事項", "修改紀錄"]];
+  var tot = [0, 0, 0, 0, 0, 0, 0];
   for (var m = 1; m <= 12; m++) {
-    var L = list.filter(function (r) { return r.at.getMonth() + 1 === m; }), used = 0, ng = 0, ngf = 0, nb = 0, np = 0;
-    L.forEach(function (r) { used += r.used; ng += r.ng; if (r.ng) ngf++; if (r.form === "pid") np++; else nb++; });
-    tot[0] += L.length; tot[1] += used; tot[2] += ng; tot[3] += ngf; tot[4] += nb; tot[5] += np;
-    st.push([m + " 月", L.length, nb, np, used, ng ? { v: ng, s: 2 } : 0, ngf, used ? Math.round(ng / used * 1000) / 10 + "%" : "—", !L.length ? "—" : isLocked(y + "-" + m) ? "🔒 鎖住" : "可以改"]);
+    var L = list.filter(function (r) { return r.at.getMonth() + 1 === m; }), used = 0, ng = 0, ngf = 0, nb = 0, np = 0, ns = 0;
+    L.forEach(function (r) { used += r.used; ng += r.ng; if (r.ng) ngf++; if (r.form === "pid") np++; else if (r.form === "sig") ns++; else nb++; });
+    tot[0] += L.length; tot[1] += used; tot[2] += ng; tot[3] += ngf; tot[4] += nb; tot[5] += np; tot[6] += ns;
+    st.push([m + " 月", L.length, nb, np, ns, used, ng ? { v: ng, s: 2 } : 0, ngf, used ? Math.round(ng / used * 1000) / 10 + "%" : "—"]);
   }
-  st.push([{ v: "全年", s: 1 }, { v: tot[0], s: 1 }, { v: tot[4], s: 1 }, { v: tot[5], s: 1 }, { v: tot[1], s: 1 }, { v: tot[2], s: tot[2] ? 2 : 1 }, { v: tot[3], s: 1 }, { v: tot[1] ? Math.round(tot[2] / tot[1] * 1000) / 10 + "%" : "—", s: 1 }, ""]);
+  st.push([{ v: "全年", s: 1 }, { v: tot[0], s: 1 }, { v: tot[4], s: 1 }, { v: tot[5], s: 1 }, { v: tot[6], s: 1 }, { v: tot[1], s: 1 }, { v: tot[2], s: tot[2] ? 2 : 1 }, { v: tot[3], s: 1 }, { v: tot[1] ? Math.round(tot[2] / tot[1] * 1000) / 10 + "%" : "—", s: 1 }]);
   list.forEach(function (r) {
     var eds = (r.edits || []).map(function (e) { return e.who + " " + fmtAt(e.at); }).join("；");
     if (r.form === "pid") {
       r.secs.forEach(function (s, k) { if (!secUsed(s)) return; pd.push([(r.at.getMonth() + 1) + " 月", fmtAt(r.at), (SITES[r.site] || { name: r.site }).name, k + 1, s.emp, s.name, s.d, s.ap, s.csig ? s.csig.who : ""].concat(s.it.map(function (v) { return v === "ng" ? { v: "不符合", s: 2 } : v === "ok" ? "符合" : ""; }), [s.note || "", eds])); });
+      return;
+    }
+    if (r.form === "sig") {
+      r.rows.forEach(function (d, i) {
+        if (!rowUsed(d)) return;
+        sd.push([(r.at.getMonth() + 1) + " 月", fmtAt(r.at), (SITES[r.site] || { name: r.site }).name, r.sig ? r.sig.who : "", i + 1, d.d, d.no, d.a === "ng" ? { v: "不符", s: 2 } : YN[d.a] || "", d.b === "ng" ? { v: "不符", s: 2 } : YN[d.b] || "", eds]);
+      });
       return;
     }
     r.rows.forEach(function (d, i) {
@@ -1150,8 +1265,8 @@ function yearXlsx(y) {
       det.push([(r.at.getMonth() + 1) + " 月", fmtAt(r.at), (SITES[r.site] || { name: r.site }).name, r.sig ? r.sig.who : "", i + 1, d.d, d.no, d.n === "" ? "" : +d.n, d.a === "ng" ? { v: "不符", s: 2 } : YN[d.a] || "", d.am, d.b === "ng" ? { v: "不符", s: 2 } : YN[d.b] || "", d.bm, eds]);
     });
   });
-  save(xlsx([{ name: "每月統計", cols: [10, 8, 10, 13, 13, 10, 13, 9, 11], rows: st }, { name: "藥袋明細", cols: [8, 17, 10, 17, 8, 12, 11, 6, 13, 24, 13, 24, 30], rows: det, filter: true }, { name: "病人辨識明細", cols: [8, 17, 10, 7, 14, 10, 12, 8, 17, 8, 8, 8, 8, 8, 8, 8, 28, 30], rows: pd, filter: true }]), "qc-" + y + "-" + rid() + ".xlsx");
-  toast("⬇ 整年 Excel：藥袋 " + (det.length - 1) + " 筆、病人辨識 " + (pd.length - 1) + " 段");
+  save(xlsx([{ name: "每月統計", cols: [10, 8, 10, 13, 13, 13, 10, 13, 9], rows: st }, { name: "藥袋明細", cols: [8, 17, 10, 17, 8, 12, 11, 6, 13, 24, 13, 24, 30], rows: det, filter: true }, { name: "病人辨識明細", cols: [8, 17, 10, 7, 14, 10, 12, 8, 17, 8, 8, 8, 8, 8, 8, 8, 28, 30], rows: pd, filter: true }, { name: "處方簽章明細", cols: [8, 17, 10, 17, 8, 12, 11, 11, 11, 30], rows: sd, filter: true }]), "qc-" + y + "-" + rid() + ".xlsx");
+  toast("⬇ 整年 Excel：藥袋 " + (det.length - 1) + " 筆、病人辨識 " + (pd.length - 1) + " 段、處方簽章 " + (sd.length - 1) + " 列");
 }
 function monthRecs(y, m) { return yearRecs(y).filter(function (r) { return r.at.getMonth() + 1 === +m; }); }
 function pctOf(a, b) { return b ? Math.round(a / b * 1000) / 10 + "%" : "—"; }
@@ -1160,10 +1275,11 @@ function pidShort(j) { return PID_ITEMS[j].replace(/^\d+\./, "").split(/[，(（
 function msumSecs(y, m) {
   var list = monthRecs(y, m), secs = [], sname = function (id) { return (SITES[id] || { name: id || "—" }).name; };
   var ov = {}, tot = { n: 0, u: 0, ng: 0, nf: 0 };
-  var bag = { rows: 0, pcs: 0, a: { ok: 0, ng: 0 }, b: { ok: 0, ng: 0 } }, pid = { secs: 0, it: PID_ITEMS.map(function () { return { ok: 0, ng: 0, no: 0 }; }) };
-  var who = {}, day = {}, ngs = [];
-  var W = function (k) { return who[k] || (who[k] = { bf: 0, br: 0, ps: 0, ng: 0 }); };
-  var D = function (k) { return day[k] || (day[k] = { b: 0, p: 0, ng: 0 }); };
+  var bag = { rows: 0, pcs: 0, a: { ok: 0, ng: 0 }, b: { ok: 0, ng: 0 } }, pid = { secs: 0, it: PID_ITEMS.map(function () { return { ok: 0, ng: 0, no: 0 }; }) }, sg = { rows: 0, a: { ok: 0, ng: 0 }, b: { ok: 0, ng: 0 } };
+  var who = {}, day = {}, ngs = [], dd = {};
+  var DD = function (k, r) { var o = dd[k] || (dd[k] = { bag: [], pid: [], sg: [], recs: [] }); if (o.recs.indexOf(r) < 0) o.recs.push(r); return o; };
+  var W = function (k) { return who[k] || (who[k] = { bf: 0, br: 0, ps: 0, sr: 0, ng: 0 }); };
+  var D = function (k) { return day[k] || (day[k] = { b: 0, p: 0, s: 0, ng: 0 }); };
   list.forEach(function (r) {
     var f = r.form || "bag", k = f + "|" + r.site, o = ov[k] || (ov[k] = { f: f, s: r.site, n: 0, u: 0, ng: 0, nf: 0 });
     o.n++; o.u += r.used; o.ng += r.ng; if (r.ng) o.nf++;
@@ -1172,46 +1288,62 @@ function msumSecs(y, m) {
       (r.secs || []).forEach(function (s) {
         if (!secUsed(s)) return;
         pid.secs++;
-        var cw = s.csig && s.csig.who || "（沒簽）", w = W(cw), dk = dayKey(s.d) || "（沒寫日期）", dd = D(dk), n0 = 0;
-        w.ps++; dd.p++;
+        var cw = s.csig && s.csig.who || "（沒簽）", w = W(cw), dk = dayKey(s.d) || "（沒寫日期）", dd0 = D(dk), n0 = 0, bad = [], nOk = 0;
+        w.ps++; dd0.p++;
         (s.it || []).forEach(function (v, j) {
           if (!pid.it[j]) return;
-          if (v === "ng") { pid.it[j].ng++; n0++; ngs.push([dk, sname(r.site), FORMS.pid, (s.name || "—") + (s.emp ? "（" + s.emp + "）" : ""), pidShort(j), (s.note || "").trim(), cw]); }
-          else if (v === "ok") pid.it[j].ok++; else pid.it[j].no++;
+          if (v === "ng") { pid.it[j].ng++; n0++; bad.push(pidShort(j)); ngs.push([dk, sname(r.site), FORMS.pid, (s.name || "—") + (s.emp ? "（" + s.emp + "）" : ""), pidShort(j), (s.note || "").trim(), cw]); }
+          else if (v === "ok") { pid.it[j].ok++; nOk++; } else pid.it[j].no++;
         });
-        w.ng += n0; dd.ng += n0;
+        w.ng += n0; dd0.ng += n0;
+        DD(dk, r).pid.push({ site: sname(r.site), obj: (s.name || "—") + (s.emp ? "（" + s.emp + "）" : ""), ap: s.ap || "", who: cw, bad: bad, ok: nOk, note: (s.note || "").trim() });
       });
       return;
     }
     var bw = recWho(r), w = W(bw);
+    if (f === "sig") {
+      (r.rows || []).forEach(function (d) {
+        if (!rowUsed(d)) return;
+        sg.rows++; w.sr++;
+        var dk = dayKey(d.d) || "（沒寫日期）", dd0 = D(dk), n0 = 0;
+        dd0.s++;
+        DD(dk, r).sg.push({ site: sname(r.site), who: bw, no: d.no || "—", a: d.a || "", b: d.b || "" });
+        if (d.a === "ok") sg.a.ok++; else if (d.a === "ng") { sg.a.ng++; n0++; ngs.push([dk, sname(r.site), FORMS.sig, d.no || "—", "醫師簽章", "", bw]); }
+        if (d.b === "ok") sg.b.ok++; else if (d.b === "ng") { sg.b.ng++; n0++; ngs.push([dk, sname(r.site), FORMS.sig, d.no || "—", "藥師簽章", "", bw]); }
+        w.ng += n0; dd0.ng += n0;
+      });
+      return;
+    }
     w.bf++;
     (r.rows || []).forEach(function (d) {
       if (!rowUsed(d)) return;
       bag.rows++; w.br++;
       var n = parseInt(d.n, 10); if (n > 0) bag.pcs += n;
-      var dk = dayKey(d.d) || "（沒寫日期）", dd = D(dk), n0 = 0;
-      dd.b++;
+      var dk = dayKey(d.d) || "（沒寫日期）", dd0 = D(dk), n0 = 0;
+      dd0.b++;
+      DD(dk, r).bag.push({ site: sname(r.site), who: bw, no: d.no || "—", n: d.n === "" || d.n === undefined ? "" : String(d.n), a: d.a || "", am: (d.am || "").trim(), b: d.b || "", bm: (d.bm || "").trim() });
       if (d.a === "ok") bag.a.ok++; else if (d.a === "ng") { bag.a.ng++; n0++; ngs.push([dk, sname(r.site), FORMS.bag, d.no || "—", "藥袋列印品質", (d.am || "").trim(), bw]); }
       if (d.b === "ok") bag.b.ok++; else if (d.b === "ng") { bag.b.ng++; n0++; ngs.push([dk, sname(r.site), FORMS.bag, d.no || "—", "藥袋調劑品質", (d.bm || "").trim(), bw]); }
-      w.ng += n0; dd.ng += n0;
+      w.ng += n0; dd0.ng += n0;
     });
   });
   var B = function (v) { return { v: v, b: 1 }; }, R = function (v) { return v ? { v: v, red: 1 } : 0; };
   var ovr = Object.keys(ov).sort().map(function (k) { var o = ov[k]; return [FORMS[o.f], sname(o.s), o.n, o.u, R(o.ng), o.nf, pctOf(o.ng, o.u)]; });
   ovr.push([B("合計"), B(""), B(tot.n), B(tot.u), tot.ng ? { v: tot.ng, b: 1, red: 1 } : B(0), B(tot.nf), B(pctOf(tot.ng, tot.u))]);
-  secs.push({ t: "一、總覽（表單 × 院區）", head: ["表單", "院區", "份數", "填的列／段", "不符（筆）", "有不符的份數", "不符率"], w: [20, 16, 10, 14, 13, 15, 12], rows: ovr });
-  if (list.some(function (r) { return (r.form || "bag") === "bag"; })) {
-    var it = function (nm, o) { return [nm, o.ok + o.ng, o.ok, R(o.ng), pctOf(o.ng, o.ok + o.ng)]; };
-    secs.push({ t: "二、" + FORMS.bag + "：項目統計（查檢 " + bag.rows + " 列、藥袋 " + bag.pcs + " 筆）", head: ["項目", "查檢（列）", "符合", "不符", "不符率"], w: [40, 15, 15, 15, 15], rows: [it("藥袋列印品質：列印字樣能清楚辨識無斷句、條碼刷讀檢測", bag.a), it("藥袋調劑品質：劑型、規格、藥品、用法、數量，是否正確", bag.b)] });
-  }
-  if (list.some(function (r) { return r.form === "pid"; })) {
-    secs.push({ t: "三、" + FORMS.pid + "：項目統計（查檢 " + pid.secs + " 段）", head: ["項目", "符合", "不符", "沒勾", "不符率"], w: [52, 12, 12, 12, 12], rows: pid.it.map(function (o, j) { return [PID_ITEMS[j], o.ok, R(o.ng), o.no, pctOf(o.ng, o.ok + o.ng)]; }) });
-  }
-  secs.push({ t: "四、查檢者", head: ["查檢者", "藥袋（份）", "藥袋（列）", "病人辨識（段）", "不符（筆）"], w: [32, 17, 17, 17, 17], rows: Object.keys(who).sort().map(function (k) { var o = who[k]; return [k, o.bf, o.br, o.ps, R(o.ng)]; }) });
-  secs.push({ t: "五、每日（照表上填的日期）", head: ["日期", "藥袋（列）", "病人辨識（段）", "不符（筆）"], w: [31, 23, 23, 23], rows: Object.keys(day).sort().map(function (k) { var o = day[k]; return [k, o.b, o.p, R(o.ng)]; }) });
+  var NUM = "一二三四五六七八九十", ni = 0, no = function () { return NUM.charAt(ni++) + "、"; };
+  var hasB = list.some(function (r) { return (r.form || "bag") === "bag"; }), hasP = list.some(function (r) { return r.form === "pid"; }), hasS = list.some(function (r) { return r.form === "sig"; });
+  secs.push({ t: no() + "總覽（表單 × 院區）", head: ["表單", "院區", "份數", "填的列／段", "不符（筆）", "有不符的份數", "不符率"], w: [20, 16, 10, 14, 13, 15, 12], rows: ovr });
+  var it = function (nm, o) { return [nm, o.ok + o.ng, o.ok, R(o.ng), pctOf(o.ng, o.ok + o.ng)]; };
+  if (hasB) secs.push({ t: no() + FORMS.bag + "：項目統計（查檢 " + bag.rows + " 列、藥袋 " + bag.pcs + " 筆）", head: ["項目", "查檢（列）", "符合", "不符", "不符率"], w: [40, 15, 15, 15, 15], rows: [it("藥袋列印品質：列印字樣能清楚辨識無斷句、條碼刷讀檢測", bag.a), it("藥袋調劑品質：劑型、規格、藥品、用法、數量，是否正確", bag.b)] });
+  if (hasP) secs.push({ t: no() + FORMS.pid + "：項目統計（查檢 " + pid.secs + " 段）", head: ["項目", "符合", "不符", "沒勾", "不符率"], w: [52, 12, 12, 12, 12], rows: pid.it.map(function (o, j) { return [PID_ITEMS[j], o.ok, R(o.ng), o.no, pctOf(o.ng, o.ok + o.ng)]; }) });
+  if (hasS) secs.push({ t: no() + FORMS.sig + "：項目統計（查檢 " + sg.rows + " 列）", head: ["項目", "查檢（列）", "符合", "不符", "不符率"], w: [40, 15, 15, 15, 15], rows: [it("醫師簽章", sg.a), it("藥師簽章", sg.b)] });
+  var wh = ["查檢者", "藥袋（份）", "藥袋（列）", "病人辨識（段）"].concat(hasS ? ["處方簽章（列）"] : [], ["不符（筆）"]);
+  secs.push({ t: no() + "查檢者", head: wh, w: hasS ? [28, 14, 14, 16, 16, 12] : [32, 17, 17, 17, 17], rows: Object.keys(who).sort().map(function (k) { var o = who[k]; return [k, o.bf, o.br, o.ps].concat(hasS ? [o.sr] : [], [R(o.ng)]); }) });
+  var dh = ["日期", "藥袋（列）", "病人辨識（段）"].concat(hasS ? ["處方簽章（列）"] : [], ["不符（筆）"]);
+  secs.push({ day: 1, t: no() + "每日（照表上填的日期）", head: dh, w: hasS ? [24, 19, 19, 19, 19] : [31, 23, 23, 23], rows: Object.keys(day).sort().map(function (k) { var o = day[k]; return [k, o.b, o.p].concat(hasS ? [o.s] : [], [R(o.ng)]); }) });
   ngs.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
-  secs.push({ t: "六、不符明細（" + ngs.length + " 筆）", head: ["日期", "院區", "表單", "領藥號／查檢對象", "項目", "不符事項", "查檢者"], w: [11, 10, 13, 15, 17, 18, 16], rows: ngs.length ? ngs.map(function (x) { return x.map(function (v, i) { return i === 4 ? { v: v, red: 1 } : v; }); }) : [["這個月沒有不符 👍", "", "", "", "", "", ""]], wrap: 1 });
-  return { y: +y, m: +m, n: list.length, secs: secs, lock: isLocked(y + "-" + m) };
+  secs.push({ ngl: 1, t: no() + "不符明細（" + ngs.length + " 筆）", head: ["日期", "院區", "表單", "領藥號／查檢對象", "項目", "不符事項", "查檢者"], w: [11, 10, 13, 15, 17, 18, 16], rows: ngs.length ? ngs.map(function (x) { return x.map(function (v, i) { return i === 4 ? { v: v, red: 1 } : v; }); }) : [["這個月沒有不符 👍", "", "", "", "", "", ""]], wrap: 1 });
+  return { y: +y, m: +m, n: list.length, secs: secs, dd: dd, lock: isLocked(y + "-" + m) };
 }
 function cv0(c) { return c && typeof c === "object" ? c.v : c; }
 function msumView(y, m) {
@@ -1232,16 +1364,84 @@ function msumBox(S0, btns, note) {
   box.appendChild(el("div", { class: "mshd" }, [el("b", { text: "📊 " + y + " 年 " + m + " 月 彙整（民國 " + (y - 1911) + " 年）" })].concat(btns || [])));
   if (note) box.appendChild(el("div", { class: "note", text: note }));
   (S0.secs || []).forEach(function (s) {
-    box.appendChild(el("h4", { text: s.t }));
-    var tb = el("table", { class: "mstab" }), tr = el("tr");
-    s.head.forEach(function (h) { tr.appendChild(el("th", { text: h })); });
-    tb.appendChild(el("thead", {}, [tr]));
-    var bd = el("tbody");
-    s.rows.forEach(function (row) { var r = el("tr"); row.forEach(function (c) { var o = c && typeof c === "object" ? c : { v: c }; r.appendChild(el("td", { class: (o.b ? "b" : "") + (o.red ? " red" : "") + (typeof o.v === "number" || /^[\d.]+%$|^—$/.test(String(o.v)) ? " num" : ""), text: String(o.v === undefined || o.v === null ? "" : o.v) })); }); bd.appendChild(r); });
-    tb.appendChild(bd);
-    box.appendChild(el("div", { class: "mswrap" }, [tb]));
+    var isDay = !!(s.day || /每日（照表/.test(s.t || ""));
+    box.appendChild(el("h4", {}, [s.t, isDay && (s.rows || []).length ? el("span", { class: "mshint", text: "點日期看那一天" }) : null]));
+    box.appendChild(el("div", { class: "mswrap" }, [msTable(s.head, s.rows, isDay ? function (dk) { dayPop(S0, dk); } : null)]));
   });
   return box;
+}
+function msTable(head, rows, onDay) {
+  var tb = el("table", { class: "mstab" + (head.length >= 6 ? " mscard" : "") }), tr = el("tr");
+  head.forEach(function (h) { tr.appendChild(el("th", { text: h })); });
+  tb.appendChild(el("thead", {}, [tr]));
+  var bd = el("tbody");
+  rows.forEach(function (row) {
+    var r = el("tr");
+    row.forEach(function (c, i) {
+      var o = c && typeof c === "object" ? c : { v: c }, t = String(o.v === undefined || o.v === null ? "" : o.v);
+      var num = typeof o.v === "number" || /^[\d.]+%$|^—$/.test(t), dt = /^\d{4}\/\d{2}\/\d{2}$/.test(t);
+      var td = el("td", { class: ((o.b ? "b" : "") + (o.red ? " red" : "") + (num ? " num" : "") + (num || dt ? " nw" : "") + (t === "" ? " emp" : "")).trim() || null, "data-l": head[i] || "" });
+      if (i === 0 && onDay && t && !o.b) { var bt = el("button", { type: "button", class: "msday", title: "看 " + t + " 這一天", text: t }); bt.onclick = function () { onDay(t); }; td.appendChild(bt); }
+      else td.textContent = t;
+      r.appendChild(td);
+    });
+    bd.appendChild(r);
+  });
+  tb.appendChild(bd);
+  return tb;
+}
+function dayPop(S0, dk) {
+  var D = S0.dd && S0.dd[dk], sum = null, sumH = [], ngSec = null;
+  (S0.secs || []).forEach(function (s) {
+    if (s.day || /每日（照表/.test(s.t || "")) { sumH = s.head || []; (s.rows || []).forEach(function (r) { if (cv0(r[0]) === dk) sum = r; }); }
+    if (s.ngl || /不符明細/.test(s.t || "")) ngSec = s;
+  });
+  var x = el("button", { type: "button", class: "btn", text: "關閉" }), bd = el("div", { class: "daybd" });
+  var hd = "📅 " + dk + (sum ? "　" + sumH.slice(1).map(function (h, i) { var v = cv0(sum[i + 1]) || 0, m = /^(.*)（(.*)）$/.exec(h) || [h, h, ""]; return m[1] + " " + v + " " + m[2]; }).join("・") : "");
+  if (D) {
+    if (D.bag.length) {
+      bd.appendChild(el("h4", { text: "📋 " + FORMS.bag + "（" + D.bag.length + " 列）" }));
+      bd.appendChild(el("div", { class: "mswrap" }, [msTable(["院區", "查檢者", "領藥號", "筆數", "列印品質", "調劑品質", "不符事項"], D.bag.map(function (b) {
+        var yn = function (v) { return v === "ng" ? { v: "不符", red: 1 } : YN[v] || ""; };
+        return [b.site, b.who, b.no, b.n, yn(b.a), yn(b.b), [b.am ? "列印：" + b.am : "", b.bm ? "調劑：" + b.bm : ""].filter(Boolean).join("；")];
+      }))]));
+    }
+    if (D.pid.length) {
+      bd.appendChild(el("h4", { text: "🪪 " + FORMS.pid + "（" + D.pid.length + " 段）" }));
+      bd.appendChild(el("div", { class: "mswrap" }, [msTable(["院區", "查檢對象", "上／下午", "查檢者", "不符的項目", "備註"], D.pid.map(function (p) {
+        return [p.site, p.obj, p.ap, p.who, p.bad.length ? { v: p.bad.join("、"), red: 1 } : p.ok ? "全部符合" : "（沒勾）", p.note];
+      }))]));
+    }
+    if (D.sg && D.sg.length) {
+      bd.appendChild(el("h4", { text: "✍️ " + FORMS.sig + "（" + D.sg.length + " 列）" }));
+      bd.appendChild(el("div", { class: "mswrap" }, [msTable(["院區", "查檢者", "領藥號", "醫師簽章", "藥師簽章"], D.sg.map(function (b) {
+        var yn = function (v) { return v === "ng" ? { v: "不符", red: 1 } : YN[v] || ""; };
+        return [b.site, b.who, b.no, yn(b.a), yn(b.b)];
+      }))]));
+    }
+    if (D.recs.length) {
+      bd.appendChild(el("h4", { text: "📄 這一天的表單（" + D.recs.length + " 份）" }));
+      var lst = el("div", { class: "dayrecs" });
+      D.recs.slice().sort(function (a, b) { return a.at - b.at; }).forEach(function (r) {
+        var b = el("button", { type: "button", class: "btn", text: "👀 PDF" }); b.onclick = function () { showPdf(r); };
+        lst.appendChild(el("div", { class: "dayrec" }, [el("span", { text: (FORMS[r.form || "bag"] || "") + "・" + ((SITES[r.site] || { name: r.site }).name || "") + "・送出 " + fmtAt(r.at) + "・" + recWho(r) }), b]));
+      });
+      bd.appendChild(lst);
+    }
+    if (!D.bag.length && !D.pid.length && !(D.sg && D.sg.length)) bd.appendChild(el("div", { class: "note", text: "這一天沒有資料。" }));
+  } else {
+    var rows = ngSec ? (ngSec.rows || []).filter(function (r) { return cv0(r[0]) === dk; }) : [];
+    bd.appendChild(el("div", { class: "note", text: "QR 檢視只看得到這一天的不符明細（看不到每一份）。" }));
+    bd.appendChild(el("h4", { text: "不符明細（" + rows.length + " 筆）" }));
+    if (rows.length) bd.appendChild(el("div", { class: "mswrap" }, [msTable(ngSec.head.slice(1), rows.map(function (r) { return r.slice(1); }))]));
+    else bd.appendChild(el("div", { class: "note", text: "這一天沒有不符 👍" }));
+  }
+  var v = el("div", { class: "dayv", role: "dialog", "aria-modal": "true", "aria-label": dk + " 這一天" }, [el("div", { class: "daybox" }, [el("div", { class: "dayhd" }, [el("b", { text: hd }), x]), bd])]);
+  var close = function () { v.remove(); };
+  x.onclick = close;
+  v.addEventListener("click", function (e) { if (e.target === v) close(); });
+  v.addEventListener("keydown", function (e) { if (e.key === "Escape") close(); });
+  ovl().appendChild(v); x.focus();
 }
 function msumQr(y, m) {
   toast("📱 做 QR 中…");
@@ -1327,9 +1527,9 @@ function msumXlsx(y, m) {
     rows.push(s.head.map(function (h) { return { v: h, s: 1 }; }));
     s.rows.forEach(function (r) { rows.push(r.map(X)); });
   });
-  var last = S0.secs[S0.secs.length - 1], dayS = S0.secs.filter(function (s) { return /^五、/.test(s.t); })[0];
+  var last = S0.secs[S0.secs.length - 1], dayS = S0.secs.filter(function (s) { return s.day; })[0];
   var ngRows = [last.head].concat(/沒有不符/.test(cv0(last.rows[0][0])) ? [] : last.rows.map(function (r) { return r.map(X); }));
-  save(xlsx([{ name: "彙整", cols: [44, 14, 13, 16, 13, 16, 14], rows: rows }, { name: "不符明細", cols: [12, 10, 16, 18, 22, 30, 18], rows: ngRows, filter: true }, { name: "每日", cols: [14, 12, 15, 12], rows: [dayS.head].concat(dayS.rows.map(function (r) { return r.map(X); })) }]), "qc-sum-" + y + "-" + pad2(m) + ".xlsx");
+  save(xlsx([{ name: "彙整", cols: [44, 14, 13, 16, 13, 16, 14], rows: rows }, { name: "不符明細", cols: [12, 10, 16, 18, 22, 30, 18], rows: ngRows, filter: true }, { name: "每日", cols: [14, 12, 15, 15, 12], rows: [dayS.head].concat(dayS.rows.map(function (r) { return r.map(X); })) }]), "qc-sum-" + y + "-" + pad2(m) + ".xlsx");
   toast("⬇ " + y + " 年 " + m + " 月 彙整 Excel");
 }
 function makePdf(rec, prev) {
@@ -1430,10 +1630,11 @@ function showPdf(rec, tag) {
     var dl = el("a", { class: "btn", href: url, download: o.file || "qc.pdf", text: "⬇ 下載 PDF" }), op = el("a", { class: "btn", href: url, target: "_blank", rel: "noopener", text: "↗ 另開" }), x = el("button", { type: "button", class: "btn", text: "關閉" });
     var pr = el("button", { type: "button", class: "btn pri pvprint", text: "🖨 列印" }); pr.onclick = function () { printRecs([o]); };
     var C = SITES[o.site] || { name: "" };
-    var v = el("div", { class: "pdfv", role: "dialog", "aria-modal": "true", "aria-label": "PDF" }, [el("div", { class: "pvbar" }, [el("b", { text: "📄 " + (tag ? "【" + tag + "】" : "") + C.name + "　" + FORMS[o.form || "bag"] + "　" + fmtAt(o.at) }), pr, op, dl, x]), el("div", { class: "pvbody" }, pagesOf(o).map(function (u, i) { return el("img", { src: u, alt: "PDF 第 " + (i + 1) + " 頁" }); }))]);
+    var v = el("div", { class: "pdfv", role: "dialog", "aria-modal": "true", "aria-label": "PDF" }, [el("div", { class: "pvbar" }, [el("b", { text: "📄 " + (tag ? "【" + tag + "】" : "") + C.name + "　" + FORMS[o.form || "bag"] + "　" + fmtAt(o.at) }), pr, op, dl, x]), el("div", { class: "pvbody", style: "display:block;text-align:center" }, pagesOf(o).map(function (u, i) { return el("img", { src: u, alt: "PDF 第 " + (i + 1) + " 頁", style: "display:block;margin:0 auto 14px" }); }))]);
     x.onclick = function () { v.remove(); setTimeout(function () { URL.revokeObjectURL(url); }, 3e4); };
     v.addEventListener("keydown", function (e) { if (e.key === "Escape") x.onclick(); });
-    ovl().appendChild(v); x.focus();
+    ovl().appendChild(v); x.focus({ preventScroll: true });
+    var pb = v.querySelector(".pvbody"); if (pb) { pb.scrollTop = 0; setTimeout(function () { pb.scrollTop = 0; }, 60); }
   };
   if (rec.pdf && rec.pngs) go(rec); else { toast("PDF 拿取中…"); fetchPdf(rec).then(go, function (e) { toast("打不開 PDF：" + errText(e)); }); }
 }
@@ -1450,16 +1651,44 @@ function yearPdf(y, ff) {
 var PID_TITLE = "藥劑科門急診組交付藥品病人辨識查檢表";
 var PID_ITEMS = ["1.請領藥者出示證件，若無證件時，需以開放性問法詢問病人身份相關問題，內容可為姓名、科別、年齡、醫師姓名。", "2.核對病人身份與處方箋基本資料相符", "3.歸還病人身分證件(若無證件時則不需要)", "4.依交付藥品標準作業流程作業", "5.目視藥袋上姓名詢問病人姓名", "6.確認藥袋為該病人之藥品無誤", "7.依目視耳聞之病人姓名唱名"];
 var PID_SECS = 6, PID_PER_PAGE = 3;
-var FORMS = { bag: "藥袋列印品質", pid: "交付藥品病人辨識" };
-var FDEF = { bag: { name: "藥袋列印品質", icon: "📋", title: TITLE }, pid: { name: "交付藥品病人辨識", icon: "🪪", title: PID_TITLE } };
-var FCFG = [{ id: "bag", name: FDEF.bag.name, icon: FDEF.bag.icon, hide: false, title: FDEF.bag.title }, { id: "pid", name: FDEF.pid.name, icon: FDEF.pid.icon, hide: false, title: FDEF.pid.title }];
+var FORMS = { bag: "藥袋列印品質", pid: "交付藥品病人辨識", sig: "處方簽章" };
+var FDEF = { bag: { name: "藥袋列印品質", icon: "📋", title: TITLE }, pid: { name: "交付藥品病人辨識", icon: "🪪", title: PID_TITLE }, sig: { name: "處方簽章", icon: "✍️", title: SIG_TITLE, sites: ["a"] } };
+var FCFG = ["bag", "pid", "sig"].map(function (id) { return { id: id, name: FDEF[id].name, icon: FDEF[id].icon, hide: false, title: FDEF[id].title, sites: (FDEF[id].sites || []).slice() }; });
+function siteOK(f, id) { var c = fc(f), a = c && c.sites || []; a = a.filter(function (x) { return SITES[x]; }); return !a.length || a.indexOf(id) >= 0; }
+function siteShow(f, id) { var C = SITES[id]; return !!C && !C.hide && siteOK(f, id); }
+function siteFix() {
+  if (S.edit || siteShow(S.form, S.site)) return false;
+  var v = SORD.filter(function (id) { return siteShow(S.form, id); })[0];
+  if (!v || v === S.site) return false;
+  STORE[S.site] = { tb: S.tb, pid: S.pid, att: S.att }; loadSite(v); return true;
+}
 function fc(id) { for (var i = 0; i < FCFG.length; i++) if (FCFG[i].id === id) return FCFG[i]; return null; }
-function fLabel(id) { var c = fc(id); return (c.icon ? c.icon + " " : "") + c.name; }
+function fLabel(id) { var c = fc(id) || FDEF[id] || { name: FORMS[id] || id }; return (c.icon && !c.img ? c.icon + " " : "") + c.name; }
+function fNode(id) { var c = fc(id) || FDEF[id] || { name: FORMS[id] || id }; return el("span", { class: "flab" }, [c.img ? el("img", { class: "ficimg", src: c.img, alt: "", draggable: "false" }) : c.icon ? el("span", { class: "ficon0", text: c.icon }) : null, c.name]); }
+function iconShrink(file) {
+  return new Promise(function (ok, bad) {
+    if (!file || !/^image\/(png|jpeg|webp|gif|bmp)$/.test(file.type || "")) { bad(new Error("要是圖片（PNG、JPG、WebP、GIF）")); return; }
+    if (file.size > 8 * 1024 * 1024) { bad(new Error("圖片太大（最多 8 MB）")); return; }
+    var u = URL.createObjectURL(file), im = new Image();
+    im.onload = function () {
+      var N = 48, cv = document.createElement("canvas"); cv.width = N; cv.height = N;
+      var g = cv.getContext("2d"), sc = Math.min(N / im.naturalWidth, N / im.naturalHeight), w = im.naturalWidth * sc, h = im.naturalHeight * sc;
+      g.imageSmoothingQuality = "high"; g.drawImage(im, (N - w) / 2, (N - h) / 2, w, h); URL.revokeObjectURL(u);
+      var d = cv.toDataURL("image/png");
+      if (d.length > 8800) d = cv.toDataURL("image/webp", 0.9);
+      if (d.length > 8800 || !/^data:image\/(png|webp)/.test(d)) { g.globalCompositeOperation = "destination-over"; g.fillStyle = "#fff"; g.fillRect(0, 0, N, N); d = cv.toDataURL("image/jpeg", 0.85); }
+      if (d.length > 8800) { bad(new Error("圖片太複雜了，換一張簡單一點的")); return; }
+      ok(d);
+    };
+    im.onerror = function () { URL.revokeObjectURL(u); bad(new Error("這個檔案不是圖片")); };
+    im.src = u;
+  });
+}
 function renderFormBtns() {
   var F = $("#qc-form"); F.innerHTML = "";
   FCFG.forEach(function (c) {
     if (c.hide) return;
-    var b = el("button", { type: "button", "data-f": c.id, class: S.form === c.id ? "on" : "", text: fLabel(c.id) });
+    var b = el("button", { type: "button", "data-f": c.id, class: S.form === c.id ? "on" : "", "aria-label": c.name }, [fNode(c.id)]);
     b.onclick = function () { setForm(c.id); };
     F.appendChild(b);
   });
@@ -1469,8 +1698,8 @@ function pidBlank() { return { emp: "", name: "", tsig: null, d: "", ap: "", it:
 function pidNew() { var a = []; for (var k = 0; k < PID_SECS; k++) a.push(pidBlank()); return a; }
 S.form = "bag"; S.pid = pidNew();
 var STORE = {};
-function stash() { STORE[S.site] = { rows: S.rows, sig: S.sig, pid: S.pid, ce: S.ce, att: S.att }; }
-function loadSite(ns) { S.site = ns; var st = STORE[ns] || {}; S.rows = st.rows || {}; S.sig = st.sig || null; S.pid = st.pid || pidNew(); S.ce = st.ce || { emp: "", name: "" }; S.att = st.att || { bag: [], pid: [] }; siteBtns(); }
+function stash() { tbPark(); STORE[S.site] = { tb: S.tb, pid: S.pid, att: S.att }; }
+function loadSite(ns) { S.site = ns; var st = STORE[ns] || {}; S.tb = st.tb || {}; tbLoad(TABF[S.form] ? S.form : "bag"); S.pid = st.pid || pidNew(); S.att = st.att || { bag: [], pid: [], sig: [] }; siteBtns(); }
 function secUsed(s) { return !!(s.emp || s.name || s.tsig || s.d || s.ap || s.csig || (s.note || "").trim() || s.it.some(function (v) { return v === "ng"; })); }
 function apNow() { return new Date().getHours() < 12 ? "上午" : "下午"; }
 function cloneSecs(a) { return a.map(function (s) { var c = JSON.parse(JSON.stringify(s)); c.tsig = s.tsig; c.csig = s.csig; return c; }); }
@@ -1519,15 +1748,9 @@ function pidSec(s, k) {
   var en = forceKeys(emp, codeChar, 12, s.emp, function (v) { s.emp = v; autoName(); });
   if (!Q.autoNm) Q.autoNm = {};
   var auto = Q.autoNm[k] && Q.autoNm[k] === s.name ? s.name : "";
-  var autoName = function () {
-    var e = s.emp, mine = s.name && s.name !== auto, fill = function (n) { if (s.emp !== e || (s.name && s.name !== auto)) return; if (n) { s.name = n; nm.value = n; auto = n; } else if (auto && s.name === auto) { s.name = ""; nm.value = ""; auto = ""; } Q.autoNm[k] = auto; };
-    if (!e || e.length < 2 || mine) return;
-    clearTimeout(autoName.t);
-    autoName.t = setTimeout(function () {
-      if (Q.whoC[e] !== undefined) { fill(Q.whoC[e]); return; }
-      api("who", e).then(function (x) { Q.whoC[e] = x.name || ""; fill(Q.whoC[e]); }, function () {  });
-    }, 350);
-  };
+  var autoName = nameAuto({ emp: function () { return s.emp; }, name: function () { return s.name; }, auto: function () { return auto; }, setAuto: function (a) { auto = a; Q.autoNm[k] = a; },
+    set: function (n) { s.name = n; nm.value = n; } });
+  empEnter(emp, autoName, nm);
   emp.oninput = function () { if (en.comp()) return; var v = emp.value.replace(/[！-～]/g, function (c) { return String.fromCharCode(c.charCodeAt(0) - 0xFEE0); }).toUpperCase().replace(/[^A-Z0-9\-]/g, ""); if (v !== emp.value) emp.value = v; s.emp = v; en.sync(v); autoName(); };
   nm.oninput = function () { s.name = nm.value.trim(); auto = ""; Q.autoNm[k] = ""; };
   if (TOUCH) { emp.addEventListener("focus", function () { kpOpen(emp, null, 0, { title: "⌨ 第 " + (k + 1) + " 段 查檢對象 員工編號：", letters: true, sym: "-", max: 12, next: nm, nextLabel: "下一格（名字）" }); }); emp.addEventListener("blur", function () { setTimeout(function () { if (KP && KP.inp === emp && document.activeElement !== emp) kpClose(); }, 0); }); }
@@ -1551,12 +1774,15 @@ function pidSec(s, k) {
     } }), [csig]))]));
   var tb = el("table", { class: "ptab", "aria-label": "第 " + (k + 1) + " 段 標準作業流程" });
   tb.appendChild(el("colgroup", {}, [el("col", { style: "width:" + (innerWidth < 640 ? 62 : 70) + "%" }), el("col", { style: "width:" + (innerWidth < 640 ? 19 : 15) + "%" }), el("col", { style: "width:" + (innerWidth < 640 ? 19 : 15) + "%" })]));
-  var hp = el("th", { scope: "col", class: "colh pev", tabindex: "0", title: "點一下：全部符合（這一段／整張表）", text: "符合" });
-  hp.onclick = function (e) { pidColPop(hp, k); e.stopPropagation(); };
-  hp.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pidColPop(hp, k); } };
+  var hp = el("th", { scope: "col", class: "colh pev", tabindex: "0", title: "點一下：全部符合／取消勾選", text: "符合" });
+  hp.onclick = function (e) { pidColPop(hp, k, "ok"); e.stopPropagation(); };
+  hp.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pidColPop(hp, k, "ok"); } };
+  var hn = el("th", { scope: "col", class: "colh pev ngh", tabindex: "0", title: "點一下：全部不符／取消勾選", text: "不符" });
+  hn.onclick = function (e) { pidColPop(hn, k, "ng"); e.stopPropagation(); };
+  hn.onkeydown = function (e) { if (e.key === "Enter" || e.key === " ") { e.preventDefault(); pidColPop(hn, k, "ng"); } };
   tb.appendChild(el("thead", {}, [
     el("tr", {}, [el("th", { rowspan: "2", text: "標準作業流程" }), el("th", { colspan: "2", class: "pevh", text: "評核" })]),
-    el("tr", { class: "pev2" }, [hp, el("th", { scope: "col", text: "不符" })])]));
+    el("tr", { class: "pev2" }, [hp, hn])]));
   var bd = el("tbody");
   PID_ITEMS.forEach(function (t, j) {
     var tr = el("tr", { "data-j": String(j) }, [el("td", { class: "pit", text: t })]);
@@ -1605,15 +1831,18 @@ function pidChkPop(td, k, j, v) {
   all.onclick = function () { popClose(); s.it = s.it.map(function (x) { return x === "ng" ? x : "ok"; }); render(); };
   clr.onclick = function () { popClose(); s.it[j] = ""; render(); };
 }
-function pidColPop(th, k) {
-  var a1 = el("button", { type: "button", class: "pri psecall", text: "✔ 這一段全部符合（第 " + (k + 1) + " 段）" });
-  var a2 = el("button", { type: "button", class: "pallsheet", text: "✔ 整張表全部符合（6 段）" });
-  var off = el("button", { type: "button", class: "psecoff", text: "✕ 拿掉這一段的「符合」" });
-  popAt(th, [el("div", { class: "t", text: "評核・符合（不符合的不會動）" }), a1, a2, off]);
-  var fill = function (s) { s.it = s.it.map(function (x) { return x === "ng" ? x : "ok"; }); };
-  a1.onclick = function () { popClose(); fill(S.pid[k]); render(); toast("第 " + (k + 1) + " 段：全部符合"); };
-  a2.onclick = function () { popClose(); S.pid.forEach(fill); render(); toast("整張表：全部符合"); };
-  off.onclick = function () { popClose(); var s = S.pid[k]; s.it = s.it.map(function (x) { return x === "ok" ? "" : x; }); render(); };
+function pidColPop(th, k, v) {
+  v = v === "ng" ? "ng" : "ok";
+  var oth = v === "ok" ? "ng" : "ok", nm = v === "ok" ? "符合" : "不符", s0 = S.pid[k], on = s0.it.filter(function (x) { return x === v; }).length;
+  var a1 = el("button", { type: "button", class: "pri psecall", text: "✔ 這一段全部" + nm + "（第 " + (k + 1) + " 段）" });
+  var a2 = v === "ok" ? el("button", { type: "button", class: "pallsheet", text: "✔ 整張表全部符合（" + S.pid.length + " 段）" }) : null;
+  var off = el("button", { type: "button", class: "psecoff", text: "✕ 取消勾選（拿掉這一段的「" + nm + "」，" + on + " 項）" });
+  if (!on) off.disabled = true;
+  popAt(th, [el("div", { class: "t", text: "評核・" + nm + "（勾了「" + (v === "ok" ? "不符" : "符合") + "」的不會動）" }), a1, a2, off]);
+  var fill = function (s) { s.it = s.it.map(function (x) { return x === oth ? x : v; }); };
+  a1.onclick = function () { popClose(); fill(s0); render(); toast("第 " + (k + 1) + " 段：全部" + nm); };
+  if (a2) a2.onclick = function () { popClose(); S.pid.forEach(fill); render(); toast("整張表：全部符合"); };
+  off.onclick = function () { popClose(); s0.it = s0.it.map(function (x) { return x === v ? "" : x; }); render(); toast("第 " + (k + 1) + " 段：「" + nm + "」的勾都取消了"); };
 }
 function pidCe(k) {
   for (var z = k; z >= 0; z--) { var c = S.pid[z] && S.pid[z].ce; if (c && c.emp && c.name) return c; }
@@ -1710,7 +1939,13 @@ function drawPid(rec, prev) {
       sigAt(g, ims[k * 2 + 1], G.cs, G.page, s.csig);
       g.font = "16px " + F; g.fillStyle = "#333"; if (s.csig) { g.fillText(s.csig.who, G.cs.x + G.cs.w + 16, y + 64); g.fillText(s.csig.at, G.cs.x + G.cs.w + 16, y + 88); }
       if (s.tsig) { g.font = "14px " + F; g.fillStyle = "#666"; g.fillText("簽：" + s.tsig.at, L, y + 75); }
-      var ty = y + 108, c1 = L + W * 0.70, c2 = L + W * 0.85, hh = 72, rh = [70, 35, 35, 35, 35, 35, 35];
+      var nt = (s.note || "").trim().replace(/\s+/g, " "), nfit = null, shk = 0;
+      if (nt) {
+        var gap0 = (k % PID_PER_PAGE === PID_PER_PAGE - 1 || k === rec.secs.length - 1) ? 1690 - (y + 460) : 34;
+        for (var sh = 0; sh <= 6 && !nfit; sh++) for (var fz = 17; fz >= 11 && !nfit; fz--) { g.font = fz + "px " + F; var nls = wrapLines(g, "備註：" + nt, W); if (nls.length * fz * 1.2 <= gap0 + sh * 6 - 4) { nfit = { f: fz, ls: nls }; shk = sh; } }
+        if (!nfit) { g.font = "11px " + F; nfit = { f: 11, ls: wrapLines(g, "備註：" + nt, W) }; shk = 6; }
+      }
+      var ty = y + 108, c1 = L + W * 0.70, c2 = L + W * 0.85, hh = 72, rh = [70, 35 - shk, 35 - shk, 35 - shk, 35 - shk, 35 - shk, 35 - shk];
       g.strokeStyle = "#111"; g.lineWidth = 3; g.strokeRect(L, ty, W, hh + rh.reduce(function (a, b) { return a + b; }, 0));
       g.lineWidth = 1.5; g.beginPath(); g.moveTo(c1, ty); g.lineTo(c1, ty + hh + rh.reduce(function (a, b) { return a + b; }, 0)); g.stroke();
       g.font = "800 24px " + F; g.textAlign = "center"; g.fillStyle = "#111"; g.fillText("標準作業流程", (L + c1) / 2, ty + hh / 2); g.fillText("評核", (c1 + Rr) / 2, ty + hh / 4);
@@ -1734,7 +1969,7 @@ function drawPid(rec, prev) {
         yy += h;
       });
       g.fillStyle = "#111"; g.textAlign = "left";
-      if ((s.note || "").trim()) { g.font = "17px " + F; g.fillStyle = "#8A5A00"; var nt = "備註：" + s.note.trim().replace(/\s+/g, " "); while (g.measureText(nt).width > W && nt.length > 4) nt = nt.slice(0, -2); g.fillText(nt, L, yy + 18); }
+      if (nfit) { g.font = nfit.f + "px " + F; g.fillStyle = "#8A5A00"; nfit.ls.forEach(function (t, j) { g.fillText(t, L, yy + 4 + nfit.f * 0.6 + j * nfit.f * 1.2); }); }
     });
     cvs.forEach(function (cv, i) {
       var g = cv.getContext("2d"); g.font = "15px " + F; g.fillStyle = "#666"; g.textAlign = "right"; g.textBaseline = "middle";
@@ -1802,6 +2037,7 @@ function renderSiteBtns() {
   var B = $("#qc-site"); if (!B) return; B.innerHTML = "";
   SORD.forEach(function (id) {
     var C = SITES[id]; if (!C || C.hide) return;
+    if (!S.edit && !siteOK(S.form, id) && id !== S.site) return;
     var b = el("button", { type: "button", "data-s": id, class: S.site === id ? "on" : "", text: C.name });
     b.disabled = !!S.edit;
     b.onclick = function () { if (S.edit) return; if (id === S.site) return; stash(); loadSite(id); $("#qc-msg").innerHTML = ""; render(); };
@@ -1809,12 +2045,13 @@ function renderSiteBtns() {
   });
 }
 function applyS() {
+  siteFix();
   if (SITES[S.site] && SITES[S.site].hide && !S.edit) { var v = SORD.filter(function (id) { return !SITES[id].hide; })[0]; if (v) { stash(); loadSite(v); } }
   renderSiteBtns(); render();
 }
 function setForm(f) {
   if (S.edit) { toast("修改中：先存修改或取消修改"); return; }
-  S.form = f; $("#qc-msg").innerHTML = "";
+  tbPark(); S.form = f; if (TABF[f]) tbLoad(f); siteFix(); renderSiteBtns(); $("#qc-msg").innerHTML = "";
   Array.prototype.forEach.call(document.querySelectorAll("#qc-form button"), function (x) { x.classList.toggle("on", x.getAttribute("data-f") === f); });
   $("#qc-paper").classList.toggle("pidp", f === "pid");
   $("#qc-draft").hidden = f !== "pid";
@@ -1827,7 +2064,8 @@ function recWho(r) {
 }
 function recNgs(r) {
   if (r.form === "pid") { var o = []; (r.secs || []).forEach(function (s, k) { (s.it || []).forEach(function (v, j) { if (v === "ng") o.push("第 " + (k + 1) + " 段（" + (s.name || "—") + "）：" + PID_ITEMS[j].split(/[，(]/)[0] + " 不符合"); }); }); return o; }
-  return (r.rows || []).map(function (d, i) { return d.a === "ng" || d.b === "ng" ? "第 " + (i + 1) + " 列（" + (d.no || "—") + "）：" + [d.a === "ng" ? "列印品質：" + (d.am || "—") : "", d.b === "ng" ? "調劑品質：" + (d.bm || "—") : ""].filter(Boolean).join("；") : ""; }).filter(Boolean);
+  var T = TF(r.form);
+  return (r.rows || []).map(function (d, i) { return d.a === "ng" || d.b === "ng" ? "第 " + (i + 1) + " 列（" + (d.no || "—") + "）：" + [d.a === "ng" ? T.ng[0] + (T.memo ? "：" + (d.am || "—") : " 不符") : "", d.b === "ng" ? T.ng[1] + (T.memo ? "：" + (d.bm || "—") : " 不符") : ""].filter(Boolean).join("；") : ""; }).filter(Boolean);
 }
 function applyCfg(c) {
   Q.cfg = c;
@@ -1839,10 +2077,11 @@ function applyCfg(c) {
     if (s.logo && !SITES[s.id].logo) logoGet(s.id);
   });
   if (!SITES[S.site] || SITES[S.site].hide) { var v = SORD.filter(function (id) { return !SITES[id].hide; })[0] || SORD[0]; S.site = v; }
-  FCFG = (c.forms || []).map(function (f) { return { id: f.id, name: f.name, icon: f.icon || "", hide: !!f.hide, title: f.title }; });
+  FCFG = (c.forms || []).map(function (f) { return { id: f.id, name: f.name, icon: f.icon || "", img: /^data:image\/(png|jpeg|webp);base64,/.test(f.img || "") ? f.img : "", hide: !!f.hide, title: f.title, sites: Array.isArray(f.sites) ? f.sites.slice() : (FDEF[f.id] && FDEF[f.id].sites || []).slice() }; });
   FCFG.forEach(function (f) { FORMS[f.id] = f.name; });
-  TITLE = fc("bag").title; PID_TITLE = fc("pid").title;
-  if (fc(S.form).hide && !S.edit) { var w = FCFG.filter(function (f) { return !f.hide; })[0]; if (w) S.form = w.id; }
+  TITLE = (fc("bag") || FDEF.bag).title; PID_TITLE = (fc("pid") || FDEF.pid).title; SIG_TITLE = (fc("sig") || FDEF.sig).title;
+  var cf = fc(S.form);
+  if ((!cf || cf.hide) && !S.edit) { var w = FCFG.filter(function (f) { return !f.hide; })[0]; if (w) { tbPark(); S.form = w.id; if (TABF[S.form]) tbLoad(S.form); } }
 }
 function logoGet(id) {
   var C = SITES[id]; if (!C || C.logoBusy) return; C.logoBusy = true;
@@ -1866,16 +2105,16 @@ function fOK(r) { return !FF || (r.form || "bag") === FF; }
 function startEdit(r) {
   if (!canEdit(r)) { toast(isLocked(mkey(r.at)) ? "🔒 這個月鎖住了，只能查閱" : "你沒有「編輯修改」的權限"); return; }
   stash();
-  S.att = { bag: [], pid: [] };
+  S.att = { bag: [], pid: [], sig: [] };
   S.edit = r; S.site = r.site; S.form = r.form || "bag";
   Array.prototype.forEach.call(document.querySelectorAll("#qc-form button"), function (x) { x.classList.toggle("on", x.getAttribute("data-f") === S.form); });
   if (S.form === "pid") S.pid = cloneSecs(r.secs).map(function (s) { var o = Object.assign(pidBlank(), s); o.ce = ceOf(s.csig); return o; });
   else { S.sig = r.sig; S.ce = ceOf(r.sig); S.rows = {}; (r.rows || []).forEach(function (d, i) { S.rows[i] = JSON.parse(JSON.stringify(d)); }); }
-  siteBtns();
+  renderSiteBtns();
   $("#qc-msg").innerHTML = ""; qgo("fill"); render(); try { Q.root.scrollIntoView(); } catch (e) {  }
   fetchPdf(r).then(function () {  }, function () {  });
 }
-function stopEdit() { S.edit = null; loadSite(S.site); $("#qc-msg").innerHTML = ""; render(); }
+function stopEdit() { S.edit = null; loadSite(S.site); siteFix(); renderSiteBtns(); $("#qc-msg").innerHTML = ""; render(); }
 function showHist(r) {
   api("hist", r.id).then(function (x) {
     var bx = el("div", { class: "modal", role: "dialog", "aria-modal": "true" }), dl = el("div", { class: "dlg" });
@@ -1892,16 +2131,12 @@ function showHist(r) {
 }
 function lockSet(key, L, msg) { api("lock", key, JSON.stringify(L)).then(function (x) { applyCfg(x.cfg); renderArch(); toast(msg); }, function (e) { toast("沒存好：" + errText(e)); }); }
 function lockPanel(y, m) {
-  var key = y + "-" + m, L = (Q.cfg.lock || {})[key] || { st: "", at: "" }, lk = isLocked(key), t = lockAt(key);
+  var key = y + "-" + m, lk = isLocked(key);
   var p = el("div", { class: "lockp" });
   p.appendChild(el("b", { text: lk ? "🔒 " + m + " 月鎖住了（大家只能查閱）" : "🔓 " + m + " 月可以修改（有勾的人）" }));
-  var b1 = el("button", { type: "button", class: "btn lkon", style: "padding:5px 12px", text: "🔒 現在鎖住" }); b1.onclick = function () { lockSet(key, { st: "lock", at: L.at || "" }, "🔒 " + m + " 月鎖住了"); };
-  var b2 = el("button", { type: "button", class: "btn lkoff", style: "padding:5px 12px", text: "🔓 打開（可以再改）" }); b2.onclick = function () { lockSet(key, { st: "open", at: L.at || "" }, "🔓 " + m + " 月打開了"); };
+  var b1 = el("button", { type: "button", class: "btn lkon", style: "padding:5px 12px", text: "🔒 現在鎖住" }); b1.onclick = function () { lockSet(key, { st: "lock", at: "" }, "🔒 " + m + " 月鎖住了"); };
+  var b2 = el("button", { type: "button", class: "btn lkoff", style: "padding:5px 12px", text: "🔓 打開（可以再改）" }); b2.onclick = function () { lockSet(key, { st: "", at: "" }, "🔓 " + m + " 月打開了"); };
   p.appendChild(lk ? b2 : b1);
-  var inp = el("input", { type: "datetime-local", value: L.at || "", "aria-label": "自動鎖住的時間" });
-  var b3 = el("button", { type: "button", class: "btn lkat", style: "padding:5px 12px", text: "⏰ 設定" }); b3.onclick = function () { lockSet(key, { st: "", at: inp.value }, inp.value ? "⏰ " + inp.value.replace("T", " ") + " 自動鎖住" : "不自動鎖住"); };
-  p.appendChild(el("span", { text: "自動鎖住時間：" })); p.appendChild(inp); p.appendChild(b3);
-  p.appendChild(el("span", { class: "note", style: "width:100%", text: L.st === "lock" ? "（開發者按了鎖住）" : L.st === "open" ? "（開發者按了打開：時間到也不會自動鎖）" : t ? "（" + fmtAt(t) + " 自動鎖住" + (L.at ? "" : "：照設定裡的「每個月自動鎖住」") + "）" : "（沒有設定時間：開發者自己按鎖住）" }));
   return p;
 }
 function listLoad(force) {
@@ -1912,10 +2147,10 @@ function listLoad(force) {
 function renderArch() {
   var A = $("#qc-arch"); if (!A) return; A.innerHTML = "";
   A.appendChild(el("h2", {}, ["📁 查閱：送出的查檢表（PDF）", el("button", { type: "button", class: "btn rld", style: "margin-left:10px;padding:4px 10px;font-size:13px", onclick: function () { Q.err = ""; Q.list = null; renderArch(); } }, ["🔄 重新整理"])]));
-  A.appendChild(el("div", { class: "note", text: "按年、按月排；月份下面紅字＝那個月有「不符」，🔒＝鎖住了（只能查閱）。點一個月份＝列出那個月的每一份。你現在是：" + me() + (isDev() ? "（開發者）" : mayEdit() ? "（可以修改）" : "（只能查閱）") + "。" }));
+  A.appendChild(el("div", { class: "note", text: "按年、按月排；月份下面紅字＝那個月有「不符」。點一個月份＝列出那個月的每一份。你現在是：" + me() + (isDev() ? "（開發者）" : mayEdit() ? "（可以修改）" : "（只能查閱）") + "。" }));
   if (!Q.list) { A.appendChild(el("p", { class: "note", text: Q.err ? "⚠️ " + Q.err : "⏳ 讀取中…" })); listLoad(); return; }
   var ARCH = Q.list;
-  var fcs = el("div", { class: "fchips", role: "group", "aria-label": "表單" }, [["", "全部"]].concat(FCFG.map(function (c) { return [c.id, fLabel(c.id)]; })).map(function (o) { var b = el("button", { type: "button", "data-ff": o[0], class: FF === o[0] ? "on" : "", text: o[1] }); b.onclick = function () { FF = o[0]; renderArch(); }; return b; }));
+  var fcs = el("div", { class: "fchips", role: "group", "aria-label": "表單" }, [["", "全部"]].concat(FCFG.map(function (c) { return [c.id, fNode(c.id)]; })).map(function (o) { var b = el("button", { type: "button", "data-ff": o[0], class: FF === o[0] ? "on" : "" }, [o[1]]); b.onclick = function () { FF = o[0]; renderArch(); }; return b; }));
   A.appendChild(fcs);
   var by = {};
   ARCH.filter(fOK).forEach(function (r) { var y = r.at.getFullYear(), m = r.at.getMonth() + 1; ((by[y] = by[y] || {})[m] = by[y][m] || []).push(r); });
@@ -1943,16 +2178,17 @@ function renderArch() {
         if (canEdit(r)) { var e1 = el("button", { type: "button", class: "btn redit", text: "✏️ 修改" }); e1.onclick = function () { startEdit(r); }; act.push(e1); }
         else act.push(el("span", { class: "ro", text: mlk ? "🔒 鎖住了：只能查閱" : "只能查閱（沒有修改權限）" }));
         if (isDev() && r.hn) { var hb = el("button", { type: "button", class: "btn rhist", text: "🕘 舊版（" + r.hn + "）" }); hb.onclick = function () { showHist(r); }; act.push(hb); }
+        if (isDev()) { var rd = el("button", { type: "button", class: "btn rredo", title: "用現在的排法重新產生這一份的 PDF（內容不變、不算修改）", text: "🔄 重做 PDF" }); rd.onclick = function () { rd.disabled = true; redoPdfs([r]); }; act.push(rd); }
         var eds = r.edits || [], last = eds[eds.length - 1];
-        rl.appendChild(el("div", { class: "ritem" }, [el("div", { class: "t" }, [el("b", {}, [fmtAt(r.at) + "　" + (SITES[r.site] || { name: "（院區）" }).name, el("span", { class: "ftag" + (r.form === "pid" ? " pid" : ""), text: fLabel(r.form || "bag") })]), el("small", { text: "查檢者：" + recWho(r) + "　填了 " + r.used + (r.form === "pid" ? " 段" : " 列") })])].concat(act, [eds.length ? el("div", { class: "ed", text: "✏️ 改過 " + eds.length + " 次（最後：" + last.who + "　" + fmtAt(last.at) + "）" }) : null, ngs.length ? el("div", { class: "ngt", text: "⚠ " + ngs.join("　") }) : null])));
+        rl.appendChild(el("div", { class: "ritem" }, [el("div", { class: "t" }, [el("b", {}, [fmtAt(r.at) + "　" + (SITES[r.site] || { name: "（院區）" }).name, el("span", { class: "ftag" + (r.form === "pid" ? " pid" : r.form === "sig" ? " sig" : "") }, [fNode(r.form || "bag")])]), el("small", { text: "查檢者：" + recWho(r) + "　填了 " + r.used + (r.form === "pid" ? " 段" : " 列") })])].concat(act, [eds.length ? el("div", { class: "ed", text: "✏️ 改過 " + eds.length + " 次（最後：" + last.who + "　" + fmtAt(last.at) + "）" }) : null, ngs.length ? el("div", { class: "ngt", text: "⚠ " + ngs.join("　") }) : null])));
       });
       var pAll = el("button", { type: "button", class: "btn mprint", style: "margin-left:10px;padding:5px 12px;font-size:14px", text: "🖨 這個月全部列印（" + items.length + " 份）" }); pAll.onclick = (function (it) { return function () { printRecs(it); }; })(items);
       var sumK = y + "-" + mm, sumB = el("button", { type: "button", class: "btn msumbtn" + (MSUM === sumK ? " on" : ""), style: "margin-left:10px;padding:5px 12px;font-size:14px", text: MSUM === sumK ? "📊 收起彙整" : "📊 這個月彙整" });
       sumB.onclick = (function (k) { return function () { MSUM = MSUM === k ? "" : k; renderArch(); if (MSUM) { var bx = $("#qc-msum"); if (bx) try { bx.scrollIntoView({ block: "start", behavior: "smooth" }); } catch (e) {  } } }; })(sumK);
-      A.appendChild(el("div", { class: "yr", style: "font-size:15px" }, [y + " 年 " + mm + " 月：" + items.length + " 份", pAll, sumB]));
+      var rdAll = isDev() ? el("button", { type: "button", class: "btn mredo", style: "margin-left:10px;padding:5px 12px;font-size:14px", title: "用現在的排法重新產生這個月每一份的 PDF（內容不變、不算修改）", text: "🔄 這個月 PDF 全部重做（" + items.length + " 份）" }) : null;
+      if (rdAll) rdAll.onclick = (function (it) { return function () { rdAll.disabled = true; redoPdfs(it); }; })(items);
+      A.appendChild(el("div", { class: "yr", style: "font-size:15px" }, [y + " 年 " + mm + " 月：" + items.length + " 份", pAll, sumB, rdAll]));
       if (MSUM === sumK) A.appendChild(msumView(+y, mm));
-      if (isDev()) A.appendChild(lockPanel(y, mm));
-      else if (!mlk && mayEdit() && lockAt(y + "-" + mm)) A.appendChild(el("div", { class: "note", text: "⏰ " + fmtAt(lockAt(y + "-" + mm)) + " 以後鎖住（只能查閱）" }));
       A.appendChild(rl);
     }
   });
@@ -1966,7 +2202,7 @@ function renderSet() {
   A.appendChild(el("h3", { text: "☁ 存放位置：雲端硬碟裡的新資料夾「" + (Q.folder || "查核和查檢") + "」" }));
   var dv = el("div", { class: "drvbox" });
   dv.appendChild(el("div", { class: "okm", text: "✅ 已經建立了。資料夾、試算表的 ID 加密存在指令碼屬性（QC_FOLDER_ID、QC_SHEET_ID），畫面、程式都不會寫出來。" }));
-  dv.appendChild(el("pre", { class: "tree", text: "📁 " + (Q.folder || "查核和查檢") + "\n├─ 📊 查核和查檢紀錄_（亂碼）（全新的試算表）\n│   ├─ 送出紀錄（每一份：時間、表單、院區代號、誰送的、不符幾筆）\n│   ├─ 藥袋明細、病人辨識明細（每一列／每一段）\n│   ├─ 修改紀錄（誰、什麼時候）\n│   ├─ 設定（院區、表單按鍵、可以修改的人、鎖住；整串加密）\n│   └─ 暫存（還沒送出的；送出就刪）\n├─ 📁 PDF → 📁 年 → 📁 月 → qc-（亂碼）.pdf\n├─ 📁 舊版（修改前的 PDF）\n├─ 📁 院名標誌（檔名亂碼）\n└─ 📁 暫存" }));
+  dv.appendChild(el("pre", { class: "tree", text: "📁 " + (Q.folder || "查核和查檢") + "\n├─ 📊 查核和查檢紀錄_（亂碼）（全新的試算表）\n│   ├─ 送出紀錄（每一份：時間、表單、院區代號、誰送的、不符幾筆）\n│   ├─ 藥袋明細、病人辨識明細、處方簽章明細（每一列／每一段）\n│   ├─ 修改紀錄（誰、什麼時候）\n│   ├─ 設定（院區、表單按鍵、可以修改的人、鎖住；整串加密）\n│   └─ 暫存（還沒送出的；送出就刪）\n├─ 📁 PDF → 📁 年 → 📁 月 → qc-（亂碼）.pdf\n├─ 📁 舊版（修改前的 PDF）\n├─ 📁 院名標誌（檔名亂碼）\n└─ 📁 暫存" }));
   dv.appendChild(el("div", { class: "note", text: "「⬇ 整年 Excel」每次按都是當下重新做一個全新的 Excel 檔（不會改到雲端的試算表）。院區在試算表上只寫代號，院名只在加密的設定裡。" }));
   A.appendChild(dv);
   }
@@ -2015,7 +2251,7 @@ function renderSet() {
   });
   A.appendChild(sl);
   A.appendChild(el("h3", { text: "📋 表單按鍵（填表最上面的按鍵）" }));
-  A.appendChild(el("div", { class: "note", text: "可以改：按鍵名稱、圖示（空白＝不要圖示）、順序（↑↓）、隱藏（暫時不用；以前送出的照樣查得到）、表單上的大標題（新的 PDF 跟著；已經送出的 PDF 不會變）。至少要留一個表單。" }));
+  A.appendChild(el("div", { class: "note", text: "可以改：按鍵名稱、圖示（空白＝不要圖示）、順序（↑↓）、隱藏（暫時不用；以前送出的照樣查得到）、表單上的大標題（新的 PDF 跟著；已經送出的 PDF 不會變）、用在哪些院區（沒勾的院區，填這張表時不會出現那個院區的按鍵）。至少要留一個表單。" }));
   var fl = el("div", { class: "flist" });
   FCFG.forEach(function (c, i) {
     var up = el("button", { type: "button", class: "btn fup", text: "↑", "aria-label": "往前" }), dn = el("button", { type: "button", class: "btn fdn", text: "↓", "aria-label": "往後" });
@@ -2031,31 +2267,42 @@ function renderSet() {
     nm.onchange = function () { var v = nm.value.trim(); if (!v) { nm.value = c.name; toast("名稱不能空白"); return; } c.name = v; cfgSave("名稱存好了"); };
     tt.onchange = function () { var v = tt.value.trim(); if (!v) { tt.value = c.title; toast("大標題不能空白"); return; } c.title = v; cfgSave("大標題存好了（新的 PDF 跟著）"); };
     sh.onchange = function () { if (!sh.checked && FCFG.filter(function (x) { return !x.hide; }).length <= 1) { sh.checked = true; toast("至少要留一個表單"); return; } c.hide = !sh.checked; cfgSave(c.name + (c.hide ? "：藏起來了" : "：顯示")); };
-    rs.onclick = function () { var d = FDEF[c.id]; c.name = d.name; c.icon = d.icon; c.title = d.title; c.hide = false; cfgSave("還原成預設"); };
+    rs.onclick = function () { var d = FDEF[c.id]; c.name = d.name; c.icon = d.icon; c.img = ""; c.title = d.title; c.hide = false; c.sites = (d.sites || []).slice(); cfgSave("還原成預設"); };
+    var iconImg = function (f) { iconShrink(f).then(function (d) { c.img = d; cfgSave("圖示換成圖片了"); }, function (e) { toast(errText(e)); }); };
+    var ifi = el("input", { type: "file", accept: "image/png,image/jpeg,image/webp,image/gif", class: "ficfile", "aria-label": "選圖片當圖示" });
+    ifi.onchange = function () { if (ifi.files && ifi.files[0]) iconImg(ifi.files[0]); ifi.value = ""; };
+    var ipz = pasteBox("📋 在這裡貼上圖片（Ctrl+V；手機長按→貼上）", iconImg); ipz.classList.add("icpaste");
+    var irm = el("button", { type: "button", class: "btn ficrm", text: "拿掉圖片（用上面的圖示）" }); irm.disabled = !c.img;
+    irm.onclick = function () { c.img = ""; cfgSave("圖片拿掉了"); };
+    var irow = el("div", { class: "ff full" }, [el("span", { text: "圖示換成圖片（複製貼上，或選檔案；會縮成小圖示）" }), el("div", { class: "lgrow" }, [c.img ? el("img", { class: "ficbig", src: c.img, alt: "目前的圖示" }) : null, ifi, ipz, irm])]);
+    var cur = (c.sites || []).filter(function (x) { return SITES[x]; }), allS = !cur.length;
+    var sbx = el("div", { class: "fsites" }, [el("span", { class: "fsl", text: "用在哪些院區：" })].concat(SORD.map(function (sid) {
+      var cb = el("input", { type: "checkbox", "data-sid": sid }); cb.checked = allS || cur.indexOf(sid) >= 0;
+      cb.onchange = function () {
+        var on = Array.prototype.filter.call(sbx.querySelectorAll("input"), function (x) { return x.checked; }).map(function (x) { return x.getAttribute("data-sid"); });
+        if (!on.length) { cb.checked = true; toast("至少要留一個院區"); return; }
+        c.sites = on.length === SORD.length ? [] : on; cfgSave(c.name + "：" + (c.sites.length ? "只用在 " + c.sites.map(function (x) { return SITES[x].name; }).join("、") : "全部院區都用"));
+      };
+      return el("label", { class: "fsh" }, [cb, SITES[sid].name]);
+    })));
     fl.appendChild(el("div", { class: "frow", "data-id": c.id }, [
-      el("div", { class: "fhd" }, [up, dn, el("b", { class: "fprev", text: fLabel(c.id) }), el("label", { class: "fsh" }, [sh, "顯示"]), rs]),
+      el("div", { class: "fhd" }, [up, dn, el("b", { class: "fprev" }, [fNode(c.id)]), el("label", { class: "fsh" }, [sh, "顯示"]), rs]),
       el("label", { class: "ff" }, [el("span", { text: "圖示" }), ic]),
       el("label", { class: "ff grow" }, [el("span", { text: "按鍵名稱" }), nm]),
-      el("label", { class: "ff full" }, [el("span", { text: "表單上的大標題（PDF 也跟著）" }), tt])]));
+      el("label", { class: "ff full" }, [el("span", { text: "表單上的大標題（PDF 也跟著）" }), tt]), irow, el("div", { class: "ff full" }, [sbx])]));
   });
   A.appendChild(fl);
   A.appendChild(el("h3", { text: "可以「編輯修改」送出的查檢表的人" }));
-  A.appendChild(el("div", { class: "note", text: "勾了＝在「📁 查閱」可以按 ✏️ 修改（還沒鎖住的月份）；沒勾＝只能查閱。" + (window.PH_SET ? "主管名單上的人都能填新的。名單＝主管名單＋開發者。" : "核可過的藥師都能填新的。名單＝手冊的核可名單。") }));
+  A.appendChild(el("div", { class: "note", text: "勾了＝在「📁 查閱」可以按 ✏️ 修改；沒勾＝只能查閱（開發者也一樣，要勾才可以修改）。" + (window.PH_SET ? "主管名單上的人都能填新的。名單＝主管名單＋開發者。" : "核可過的藥師都能填新的。名單＝手冊的核可名單。") }));
   var pl = el("div", { class: "plist" });
   if (!Q.people) { pl.appendChild(el("span", { class: "note", text: "⏳ 名單讀取中…" })); api("people").then(function (x) { Q.people = x.people || []; if (Q.tab === "set") renderSet(); }, function (e) { Q.people = []; toast("名單讀不到：" + errText(e)); }); }
   else (Q.people.length ? Q.people : []).forEach(function (p) {
-    var ed = Q.cfg.editors || [], c = el("input", { type: "checkbox", "data-uid": p.uid, "data-emp": p.emp }); c.checked = !!p.dev || ed.indexOf(p.uid) >= 0; c.disabled = !!p.dev;
-    c.onchange = function () { var a = (Q.cfg.editors || []).slice(), i = a.indexOf(p.uid); if (c.checked && i < 0) a.push(p.uid); if (!c.checked && i >= 0) a.splice(i, 1); Q.cfg.editors = a; cfgSave((p.name || p.emp) + (c.checked ? "：可以修改" : "：只能查閱")); };
-    pl.appendChild(el("label", { class: p.dev ? "dev" : "" }, [c, (p.name || "（沒有名字）") + (p.emp ? "（" + p.emp + "）" : "") + (p.dev ? "　開發者（一定可以）" : "")]));
+    var ed = Q.cfg.editors || [], c = el("input", { type: "checkbox", "data-uid": p.uid, "data-emp": p.emp }); c.checked = ed.indexOf(p.uid) >= 0;
+    c.onchange = function () { var a = (Q.cfg.editors || []).slice(), i = a.indexOf(p.uid); if (c.checked && i < 0) a.push(p.uid); if (!c.checked && i >= 0) a.splice(i, 1); Q.cfg.editors = a; if (p.emp && Q.me && Q.me.emp && String(p.emp).toUpperCase() === String(Q.me.emp).toUpperCase()) Q.may = c.checked; cfgSave((p.name || p.emp) + (c.checked ? "：可以修改" : "：只能查閱")); };
+    pl.appendChild(el("label", { class: p.dev ? "dev" : "" }, [c, (p.name || "（沒有名字）") + (p.emp ? "（" + p.emp + "）" : "") + (p.dev ? "　開發者" : "")]));
   });
   if (Q.people && !Q.people.length) pl.appendChild(el("span", { class: "note", text: window.PH_SET ? "主管名單上還沒有人（上面「👥 主管名單」先加）。" : "核可名單上還沒有人。" }));
   A.appendChild(pl);
-  A.appendChild(el("h3", { text: "每個月自動鎖住（過了時間＝只能查閱）" }));
-  var sel = el("select", { id: "qc-autoday", "aria-label": "每個月自動鎖住" });
-  [[0, "不自動：開發者自己按「🔒 鎖住」"], [1, "下個月 1 號 00:00 鎖住"], [3, "下個月 3 號 00:00 鎖住"], [5, "下個月 5 號 00:00 鎖住"], [10, "下個月 10 號 00:00 鎖住"]].forEach(function (o) { sel.appendChild(el("option", { value: String(o[0]), text: o[1] })); });
-  sel.value = String(Q.cfg.autoDay || 0); sel.onchange = function () { Q.cfg.autoDay = +sel.value; cfgSave("存好了"); };
-  A.appendChild(sel);
-  A.appendChild(el("div", { class: "note", style: "margin-top:8px", text: "個別月份：到「📁 查閱」點那個月 → 下面黃色框「🔒 現在鎖住／🔓 打開／⏰ 自動鎖住時間」（個別月份的設定比這裡優先）。" }));
 }
 function qgo(v) {
   if (v === "set" && !isDev()) v = "fill";
@@ -2084,7 +2331,7 @@ function wire() {
   $("#qc-clear").onclick = function () {
     if (S.edit) { stopEdit(); toast("不改了（原本那一份沒變）"); return; }
     if (S.form === "pid") { S.pid = pidNew(); attOf("pid").length = 0; Q.draftLoaded.pid = false; $("#qc-msg").innerHTML = ""; render(); if (Q.drafts.pid) toast("清掉了（暫存的還在：可以按「📂 拿回暫存的」）"); return; }
-    S.rows = {}; S.sig = null; S.ce = { emp: "", name: "" }; attOf("bag").length = 0; $("#qc-msg").innerHTML = ""; render();
+    S.rows = {}; S.sig = null; S.ce = { emp: "", name: "" }; attOf(S.form).length = 0; $("#qc-msg").innerHTML = ""; render();
   };
   $("#qc-tabs [data-v=set]").hidden = !isDev();
 }
@@ -2107,6 +2354,7 @@ function boot(force) {
     Q.none = false; Q.may = !!x.may; Q.drafts = x.drafts || {}; Q.folder = x.folder;
     $("#qc-tabs").style.display = ""; $("#qc-site").style.display = ""; $("#qc-vfill .bar").style.display = "";
     applyCfg(x.cfg); wire(); renderFormBtns(); renderSiteBtns(); qgo(Q.tab || "fill"); render();
+    whoMapLoad();
   }, function (e) {
     Q.busy = false; Q.err = errText(e);
     var P2 = $("#qc-paper"); if (P2) { P2.innerHTML = ""; P2.appendChild(el("p", { class: "bad", text: "⚠️ " + Q.err })); P2.appendChild(el("button", { type: "button", class: "btn", text: "🔄 再試一次", onclick: function () { boot(true); } })); }
@@ -2123,7 +2371,7 @@ function reset() {
   if (Q.ov) try { Q.ov.remove(); } catch (e) {  }
   var pp = document.getElementById("qc-printpage"); if (pp) pp.remove();
   Q = { boot: false, busy: false, none: false, dev: false, may: false, me: { name: "", emp: "" }, cfg: null, drafts: {}, list: null, listBusy: false, people: null, root: null, ov: null, tab: "fill", err: "", draftLoaded: {}, sending: false, whoC: {} };
-  S = { site: "a", sig: null, rows: {}, edit: null, form: "bag", pid: pidNew(), ce: { emp: "", name: "" } }; STORE = {}; SITES = {}; SORD = []; POP = null; KP = null;
+  S = { site: "a", sig: null, rows: {}, edit: null, form: "bag", pid: pidNew(), ce: { emp: "", name: "" }, tb: {} }; STORE = {}; SITES = {}; SORD = []; POP = null; KP = null;
 }
 function injectCss() {
   if (document.getElementById("qc-css")) return;
