@@ -14,6 +14,7 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui
 .ph-in:focus{outline:2px solid var(--accent);outline-offset:1px;background:#fff}
 .ph-boxes{display:flex;gap:10px}
 .ph-box{text-align:center;letter-spacing:.35em;font-size:22px;font-variant-numeric:tabular-nums}
+.ph-code1{letter-spacing:.18em;font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:24px}
 .ph-btn{font:inherit;font-weight:700;font-size:17px;border-radius:11px;padding:12px;margin-top:16px;border:1px solid var(--line2);background:#fff;color:var(--ink);cursor:pointer;min-height:50px;touch-action:manipulation}
 .ph-btn.pri{background:var(--accent);border-color:var(--accent);color:#fff}
 .ph-btn:disabled{opacity:.6;cursor:default}
