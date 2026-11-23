@@ -1,5 +1,5 @@
 "use strict";
-var PHV = "1.4（第 79 批・本年彙整）";
+var PHV = "1.5（第 80 批・登入畫面）";
 var XRE = /^[A-Za-z0-9_-]{20,120}$/, TRE = /^[0-9a-f]{32}$/;
 var X = "", T = "", DK = "", SHR = "", ME = null, IDLE_MIN = 30, LAST = Date.now(), PING = 0, IDT = 0;
 var APP = null;
@@ -136,51 +136,69 @@ function pkLogin(m, btn) {
 }
 function scrLogin(why) {
   ssSet("pht", ""); T = ""; ME = null;
-  var emp = h("input", { class: "ph-in", id: "ph-emp", maxlength: "20", autocomplete: "off", spellcheck: "false", "aria-label": "員工編號" });
-  var nm = h("input", { class: "ph-in", id: "ph-name", maxlength: "20", autocomplete: "off", spellcheck: "false", "aria-label": "姓名" });
+  var emp = h("input", { class: "ph-in", id: "ph-emp", maxlength: "20", autocomplete: "off", spellcheck: "false", "aria-label": "員工編號", placeholder: "員工編號" });
+  var nm = h("input", { class: "ph-in", id: "ph-name", maxlength: "20", autocomplete: "off", spellcheck: "false", "aria-label": "姓名", placeholder: "姓名" });
   if (typeof QC !== "undefined" && QC.empKeys) QC.empKeys(emp, { title: "⌨ 員工編號：", next: nm, nextLabel: "下一格（姓名）" });
-  var m = msgEl(), busy = false;
+  var m = msgEl(), busy = false, sec = "", cbusy = false;
   if (why === "expired") m.textContent = "閒置太久（或在別的地方登出了），請重新登入。";
   else if (why === "out") m.textContent = "已登出。";
-  var go = h("button", { type: "button", class: "ph-btn" + (PK_OK ? "" : " pri"), id: "ph-go", text: PK_OK ? "用 LINE 驗證碼登入" : "登入" });
+  var go = h("button", { type: "button", class: "ph-btn pri ph-send", id: "ph-go", text: "📨 傳驗證碼到 LINE" });
+  var code = h("input", { class: "ph-in ph-box ph-code1", id: "ph-code", inputmode: "text", maxlength: "24", placeholder: "先做 ①", disabled: "disabled", autocomplete: "one-time-code", autocapitalize: "off", autocorrect: "off", spellcheck: "false", "aria-label": "LINE 驗證碼" });
+  var ok = h("button", { type: "button", class: "ph-btn pri ph-login", id: "ph-codego", text: "登入", disabled: "disabled" });
+  var left = h("p", { class: "ph-note ph-left", text: "" }), tm = 0;
+  var cl = function (v) { return String(v || "").replace(/[！-～]/g, function (ch) { return String.fromCharCode(ch.charCodeAt(0) - 65248); }).replace(/。/g, ".").replace(/、/g, ",").replace(/[^A-Za-z0-9,.\/;\-ㄅ-ㄯ]/g, "").slice(0, 20); };
+  var comp = false;
+  code.addEventListener("compositionstart", function () { comp = true; });
+  code.addEventListener("compositionend", function () { comp = false; setTimeout(function () { code.oninput(); }, 0); });
+  code.oninput = function (ev) { if (comp || (ev && ev.isComposing)) return; var t = code.value.replace(/[^A-Za-z0-9,.\/;\-ㄅ-ㄯ 。、]/g, "").replace(/ {2,}/g, " "); if (t !== code.value) code.value = t; if (/^\d{6}$/.test(cl(code.value))) ok.onclick(); };
+  code.onkeydown = function (ev) { if (ev.key === "Enter") ok.onclick(); };
+  code.onpaste = function (ev) { var t = (ev.clipboardData || window.clipboardData).getData("text"); if (/[A-Za-z0-9]/.test(t)) { ev.preventDefault(); code.value = cl(t); if (code.value.length >= 6) ok.onclick(); } };
+  var step2 = function (s) {
+    sec = s; code.disabled = false; ok.disabled = false; code.placeholder = "例：su3cl3 Kp7Q"; code.value = "";
+    go.textContent = "🔁 重新傳驗證碼"; go.classList.remove("pri");
+    m.classList.add("ok"); m.textContent = "📨 驗證碼已經傳到你的 LINE「藥戰手冊」：在 LINE 按「📋 複製驗證碼」，貼在 ②。";
+    var end = Date.now() + 5 * 60e3; clearInterval(tm);
+    var tick = function () { var r = Math.max(0, Math.round((end - Date.now()) / 1000)); left.textContent = r ? Math.floor(r / 60) + ":" + (r % 60 < 10 ? "0" : "") + (r % 60) + " 內有效" : "過期了：請在 ① 按「🔁 重新傳驗證碼」"; if (!r) { clearInterval(tm); ok.disabled = true; } if (!document.body.contains(left)) clearInterval(tm); };
+    tick(); tm = setInterval(tick, 1000);
+    try { code.focus(); } catch (e) {  }
+  };
   go.onclick = function () {
     if (busy) return;
     var e = String(emp.value || "").replace(/\s+/g, ""), n = String(nm.value || "").replace(/\s+/g, " ").trim();
-    if (!e || !n) { m.textContent = "員工編號、姓名都要打"; try { (e ? nm : emp).focus(); } catch (x) {  } return; }
-    busy = true; go.disabled = true; m.textContent = "⏳ 確認中…";
+    if (!e || !n) { m.textContent = "① 員工編號、姓名都要打"; try { (e ? nm : emp).focus(); } catch (x) {  } return; }
+    busy = true; go.disabled = true; m.classList.remove("ok"); m.textContent = "⏳ 確認中…";
     call("phLogin", [e, n], { ms: 60000 }).then(function (r) {
       busy = false; go.disabled = false;
-      if (r && r.need === "code") { scrCode(r.sec); return; }
-      if (r && TRE.test(r.t || "")) { enter(r); return; }
+      if (r && r.need === "code") { step2(r.sec); return; }
+      if (r && TRE.test(r.t || "")) { clearInterval(tm); enter(r); return; }
       m.textContent = "❌ " + String(r && r.err || "員工編號或姓名不對");
     }, function (x) { busy = false; go.disabled = false; m.textContent = "❌ " + x.message; });
   };
+  ok.onclick = function () {
+    if (cbusy || !sec) return;
+    var v = cl(code.value);
+    if (v.length < 6) { m.textContent = "② 請打 LINE 卡片上的驗證碼（例如 su3cl3 Kp7Q）"; return; }
+    cbusy = true; ok.disabled = true; m.classList.remove("ok"); m.textContent = "⏳ 確認中…";
+    call("phCode", [sec, v]).then(function (r) {
+      cbusy = false; ok.disabled = false;
+      if (r && TRE.test(r.t || "")) { clearInterval(tm); enter(r); return; }
+      if (r && r.gone) { sec = ""; code.disabled = true; ok.disabled = true; clearInterval(tm); left.textContent = ""; m.textContent = "❌ " + r.err + "（請在 ① 重新傳驗證碼）"; return; }
+      m.textContent = "❌ " + String(r && r.err || "驗證碼不對"); code.value = ""; code.focus();
+    }, function (x) { cbusy = false; ok.disabled = false; m.textContent = "❌ " + x.message; });
+  };
   [emp, nm].forEach(function (x) { x.onkeydown = function (ev) { if (ev.key === "Enter") go.onclick(); }; });
-  var lineBox = [
-    h("label", { class: "ph-lb", for: "ph-emp", text: "員工編號" }), emp,
-    h("label", { class: "ph-lb", for: "ph-name", text: "姓名" }), nm,
-    go
-  ];
-  var kids;
+  var b1 = h("div", { class: "ph-stepbox" }, [h("p", { class: "ph-steph" }, ["① 請輸入", h("b", { text: "員工編號、姓名" })]), emp, nm, go, h("p", { class: "ph-note", text: "要跟「主管名單」上的一字不差。" })]);
+  var b2 = h("div", { class: "ph-stepbox" }, [h("p", { class: "ph-steph" }, ["② 請輸入", h("b", { text: "驗證碼" })]), code, ok, left]);
+  var kids = [h("div", { class: "ph-head ph-headl" }, [phLogo(), h("h1", { class: "ph-t", text: "PH資料庫" })]), h("h2", { class: "ph-lt", text: "🔐 登入 PH資料庫" }), h("div", { class: "ph-steps" }, [b1, b2]), m];
   if (PK_OK) {
-    var pk = h("button", { type: "button", class: "ph-btn pri ph-pk", id: "ph-pk", text: "🔑 用 passkey 登入" });
+    var pk = h("button", { type: "button", class: "ph-btn ph-pkb", id: "ph-pk", text: "👆 用 Passkey 登入" });
     pk.onclick = function () { pkLogin(m, pk); };
-    var more = h("details", { class: "ph-more" + (why === "line" ? "" : ""), id: "ph-line" }, [h("summary", { text: "沒有 passkey、換新手機？用 LINE 驗證碼登入" })].concat(lineBox, [h("p", { class: "ph-note", text: "員工編號、姓名要跟「主管名單」上的一字不差，LINE「藥戰手冊」會收到驗證碼。登入後可以把這台裝置設成 passkey。" })]));
-    if (why === "line") more.open = true;
-    more.addEventListener("toggle", function () { if (more.open && !("ontouchstart" in window)) try { emp.focus(); } catch (e) {  } });
-    kids = title("主管專用").concat([
-      pk,
-      h("p", { class: "ph-note ph-pkn", text: "用這台裝置的指紋、臉部或螢幕鎖確認，再輸入員工編號、姓名。" }),
-      m, more,
-      h("p", { class: "ph-note" }, ["閒置 " + IDLE_MIN + " 分鐘自動登出；共用電腦用完請按「登出」。"])
-    ]);
-  } else {
-    kids = title("主管專用・請用自己的員工編號、姓名").concat(lineBox, [m,
-      h("p", { class: "ph-note" }, ["要跟「主管名單」上的一字不差，每次登入 LINE「藥戰手冊」都會收到驗證碼。", h("br"), "（這個瀏覽器不支援 passkey）", h("br"), "閒置 " + IDLE_MIN + " 分鐘自動登出；共用電腦用完請按「登出」。"])]);
+    kids.push(h("div", { class: "ph-or" }, [h("span", { text: "或" })]), pk, h("p", { class: "ph-note ph-pkn", text: "Face ID、指紋、Windows Hello（這台建立過才能用；第一次請先用驗證碼登入，進去以後會請你建立）" }));
   }
-  card(kids, "login");
+  kids.push(h("p", { class: "ph-note ph-foot" }, ["驗證碼只能在這裡用、只能用一次；不要給任何人。閒置 " + IDLE_MIN + " 分鐘自動登出；共用電腦用完請按「登出」。" + (PK_OK ? "" : "（這個瀏覽器不支援 passkey）")]));
+  card(kids, "login wide");
   if (PK_OK) pkPre(false).catch(function () {  });
-  else if (!("ontouchstart" in window)) try { emp.focus(); } catch (e) {  }
+  if (!("ontouchstart" in window)) try { emp.focus(); } catch (e) {  }
 }
 function scrPkWho(sec) {
   var emp = h("input", { class: "ph-in", id: "ph-emp2", maxlength: "20", autocomplete: "off", spellcheck: "false", "aria-label": "員工編號" });
