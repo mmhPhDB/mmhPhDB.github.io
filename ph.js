@@ -1,5 +1,5 @@
 "use strict";
-var PHV = "1.5（第 80 批・登入畫面）";
+var PHV = "1.6（第 81 批・登入文字）";
 var XRE = /^[A-Za-z0-9_-]{20,120}$/, TRE = /^[0-9a-f]{32}$/;
 var X = "", T = "", DK = "", SHR = "", ME = null, IDLE_MIN = 30, LAST = Date.now(), PING = 0, IDT = 0;
 var APP = null;
@@ -94,7 +94,7 @@ function b64u(buf) { var a = new Uint8Array(buf), s = ""; for (var i = 0; i < a.
 function ub64(s) { s = String(s || "").replace(/-/g, "+").replace(/_/g, "/"); while (s.length % 4) s += "="; var b = atob(s), a = new Uint8Array(b.length); for (var i = 0; i < b.length; i++) a[i] = b.charCodeAt(i); return a; }
 function pkErr(e, reg) {
   var n = e && e.name || "";
-  if (n === "NotAllowedError" || n === "AbortError") return reg ? "取消了（或等太久）。要設定的話再按一次。" : "取消了，或這台裝置沒有 PH資料庫的 passkey（第一次請用下面的 LINE 驗證碼登入，再設定 passkey）。";
+  if (n === "NotAllowedError" || n === "AbortError") return reg ? "取消了（或等太久）。要設定的話再按一次。" : "這台還沒有 passkey，請改用驗證碼。";
   if (n === "InvalidStateError") return "這台裝置已經設定過 PH資料庫的 passkey 了。";
   if (n === "SecurityError") return "網址不對：passkey 只能在 PH資料庫正式的網站用。";
   if (n === "NotSupportedError") return "這台裝置不支援 passkey，請繼續用 LINE 驗證碼。";
@@ -142,7 +142,7 @@ function scrLogin(why) {
   var m = msgEl(), busy = false, sec = "", cbusy = false;
   if (why === "expired") m.textContent = "閒置太久（或在別的地方登出了），請重新登入。";
   else if (why === "out") m.textContent = "已登出。";
-  var go = h("button", { type: "button", class: "ph-btn pri ph-send", id: "ph-go", text: "📨 傳驗證碼到 LINE" });
+  var go = h("button", { type: "button", class: "ph-btn pri ph-send", id: "ph-go", text: "📨 傳驗證碼" });
   var code = h("input", { class: "ph-in ph-box ph-code1", id: "ph-code", inputmode: "text", maxlength: "24", placeholder: "先做 ①", disabled: "disabled", autocomplete: "one-time-code", autocapitalize: "off", autocorrect: "off", spellcheck: "false", "aria-label": "LINE 驗證碼" });
   var ok = h("button", { type: "button", class: "ph-btn pri ph-login", id: "ph-codego", text: "登入", disabled: "disabled" });
   var left = h("p", { class: "ph-note ph-left", text: "" }), tm = 0;
@@ -156,7 +156,7 @@ function scrLogin(why) {
   var step2 = function (s) {
     sec = s; code.disabled = false; ok.disabled = false; code.placeholder = "例：su3cl3 Kp7Q"; code.value = "";
     go.textContent = "🔁 重新傳驗證碼"; go.classList.remove("pri");
-    m.classList.add("ok"); m.textContent = "📨 驗證碼已經傳到你的 LINE「藥戰手冊」：在 LINE 按「📋 複製驗證碼」，貼在 ②。";
+    m.classList.add("ok"); m.textContent = "驗證碼已經傳到你的 LINE（5 分鐘內有效），請查看";
     var end = Date.now() + 5 * 60e3; clearInterval(tm);
     var tick = function () { var r = Math.max(0, Math.round((end - Date.now()) / 1000)); left.textContent = r ? Math.floor(r / 60) + ":" + (r % 60 < 10 ? "0" : "") + (r % 60) + " 內有效" : "過期了：請在 ① 按「🔁 重新傳驗證碼」"; if (!r) { clearInterval(tm); ok.disabled = true; } if (!document.body.contains(left)) clearInterval(tm); };
     tick(); tm = setInterval(tick, 1000);
@@ -187,15 +187,15 @@ function scrLogin(why) {
     }, function (x) { cbusy = false; ok.disabled = false; m.textContent = "❌ " + x.message; });
   };
   [emp, nm].forEach(function (x) { x.onkeydown = function (ev) { if (ev.key === "Enter") go.onclick(); }; });
-  var b1 = h("div", { class: "ph-stepbox" }, [h("p", { class: "ph-steph" }, ["① 請輸入", h("b", { text: "員工編號、姓名" })]), emp, nm, go, h("p", { class: "ph-note", text: "要跟「主管名單」上的一字不差。" })]);
+  var b1 = h("div", { class: "ph-stepbox" }, [h("p", { class: "ph-steph" }, ["① 請輸入", h("b", { text: "員工編號、姓名" })]), emp, nm, go]);
   var b2 = h("div", { class: "ph-stepbox" }, [h("p", { class: "ph-steph" }, ["② 請輸入", h("b", { text: "驗證碼" })]), code, ok, left]);
   var kids = [h("div", { class: "ph-head ph-headl" }, [phLogo(), h("h1", { class: "ph-t", text: "PH資料庫" })]), h("h2", { class: "ph-lt", text: "🔐 登入 PH資料庫" }), h("div", { class: "ph-steps" }, [b1, b2]), m];
   if (PK_OK) {
     var pk = h("button", { type: "button", class: "ph-btn ph-pkb", id: "ph-pk", text: "👆 用 Passkey 登入" });
     pk.onclick = function () { pkLogin(m, pk); };
-    kids.push(h("div", { class: "ph-or" }, [h("span", { text: "或" })]), pk, h("p", { class: "ph-note ph-pkn", text: "Face ID、指紋、Windows Hello（這台建立過才能用；第一次請先用驗證碼登入，進去以後會請你建立）" }));
+    kids.push(h("div", { class: "ph-or" }, [h("span", { text: "或" })]), pk, h("p", { class: "ph-note ph-pkn", text: "Face ID、指紋、Windows Hello（第一次請先用驗證碼）" }));
   }
-  kids.push(h("p", { class: "ph-note ph-foot" }, ["驗證碼只能在這裡用、只能用一次；不要給任何人。閒置 " + IDLE_MIN + " 分鐘自動登出；共用電腦用完請按「登出」。" + (PK_OK ? "" : "（這個瀏覽器不支援 passkey）")]));
+  kids.push(h("p", { class: "ph-note ph-foot" }, ["閒置 " + IDLE_MIN + " 分鐘自動登出。"]));
   card(kids, "login wide");
   if (PK_OK) pkPre(false).catch(function () {  });
   if (!("ontouchstart" in window)) try { emp.focus(); } catch (e) {  }
@@ -220,11 +220,11 @@ function scrPkWho(sec) {
   };
   [emp, nm].forEach(function (x) { x.onkeydown = function (ev) { if (ev.key === "Enter") ok.onclick(); }; });
   var back = h("button", { type: "button", class: "ph-btn", text: "← 回登入" }); back.onclick = function () { scrLogin(); };
-  card(title("✅ passkey 確認了・請輸入員工編號和姓名").concat([
+  card(title("請輸入員工編號和姓名").concat([
     h("label", { class: "ph-lb", for: "ph-emp2", text: "員工編號" }), emp,
     h("label", { class: "ph-lb", for: "ph-name2", text: "姓名" }), nm,
     ok, back, m,
-    h("p", { class: "ph-note", text: "要跟主管名單上的一字不差（5 分鐘內有效，打錯 3 次要重新用 passkey）。" })
+    null
   ]), "login");
   if (!("ontouchstart" in window)) try { emp.focus(); } catch (e) {  }
 }
@@ -255,7 +255,7 @@ function scrPkOffer() {
   var m = msgEl(), pre = null, busy = false;
   var yes = h("button", { type: "button", class: "ph-btn pri ph-pk", id: "ph-pkyes", text: "🔑 把這台設成 passkey" });
   var later = h("button", { type: "button", class: "ph-btn", id: "ph-pklater", text: "以後再說" });
-  var never = h("button", { type: "button", class: "ph-lnk", id: "ph-pknever", text: "這台不要再問（共用電腦）" });
+  var never = h("button", { type: "button", class: "ph-lnk", id: "ph-pknever", text: "這台不要再問" });
   later.onclick = function () { main(); };
   never.onclick = function () { lsSet(pkMarkK(), "no"); main(); };
   yes.onclick = function () {
@@ -265,10 +265,10 @@ function scrPkOffer() {
       busy = false; card(title("✅ passkey 設定好了").concat([h("p", { class: "ph-sub2", text: "下次在這台按「🔑 用 passkey 登入」，再輸入員工編號、姓名就可以進來，不用等 LINE 驗證碼。" }), (function () { var b = h("button", { type: "button", class: "ph-btn pri", id: "ph-pkin", text: "進入 PH資料庫" }); b.onclick = function () { main(); }; return b; })()]), "login");
     }, function (e) { busy = false; yes.disabled = false; pre = null; pkRegStart().then(function (o) { pre = o; }, function () {  }); m.textContent = "❌ " + String(e && e.message || e); });
   };
-  card(title("🔑 下次用 passkey 登入？").concat([
-    h("p", { class: "ph-sub2", text: "把這台裝置設成 passkey：下次用指紋、臉部或螢幕鎖確認，再輸入員工編號、姓名就能登入，不用等 LINE 驗證碼。" }),
+  card(title("下次用 passkey 登入？").concat([
+    h("p", { class: "ph-sub2", text: "下次用指紋或臉部就能登入。" }),
     yes, later, m, never,
-    h("p", { class: "ph-note", text: "passkey 只存在你的裝置（或 iCloud 鑰匙圈／Google 密碼管理工具）裡，PH資料庫只存「公開鑰匙」。換手機或想刪掉，右上角「🔑」可以管理。" })
+    null
   ]), "login");
   pkRegStart().then(function (o) { pre = o; }, function (e) { m.textContent = "⚠ " + String(e && e.message || e); });
 }
@@ -331,9 +331,8 @@ function scrCode(sec) {
     }, function (x) { busy = false; ok.disabled = false; m.textContent = "❌ " + x.message; });
   };
   var back = h("button", { type: "button", class: "ph-btn", text: "← 回登入" }); back.onclick = function () { scrLogin(); };
-  card(title(PK_OK ? "🔐 LINE 驗證碼" : "🔐 LINE 驗證碼（每次登入都要）").concat([
-    h("p", { class: "ph-sub2", text: "驗證碼已經傳到你的 LINE「藥戰手冊」（5 分鐘內有效）" }),
-    h("label", { class: "ph-lb", text: "驗證碼（LINE 上按「📋 複製驗證碼」，在這裡貼上）" }), a,
+  card(title("🔐 驗證碼").concat([
+    h("label", { class: "ph-lb", text: "驗證碼" }), a,
     ok, back, m
   ]), "code");
   try { a.focus(); } catch (e) {  }
