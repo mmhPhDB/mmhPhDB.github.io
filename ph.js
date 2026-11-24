@@ -1,5 +1,5 @@
 "use strict";
-var PHV = "1.8（第 83 批・不符率修正）";
+var PHV = "1.9（第 84 批・彙整明細＋Excel 兩頁）";
 var XRE = /^[A-Za-z0-9_-]{20,120}$/, TRE = /^[0-9a-f]{32}$/;
 var X = "", T = "", DK = "", SHR = "", ME = null, IDLE_MIN = 30, LAST = Date.now(), PING = 0, IDT = 0;
 var APP = null;
@@ -1539,7 +1539,7 @@ function msumSecs(y, m) {
           else if (v === "ok") { pid.it[j].ok++; nOk++; } else pid.it[j].no++;
         });
         w.ng += n0; dd0.ng += n0;
-        DD(dk, r).pid.push({ site: sname(r.site), obj: (s.name || "—") + (s.emp ? "（" + s.emp + "）" : ""), ap: s.ap || "", who: cw, bad: bad, ok: nOk, note: (s.note || "").trim() });
+        DD(dk, r).pid.push({ site: sname(r.site), obj: (s.name || "—") + (s.emp ? "（" + s.emp + "）" : ""), ap: s.ap || "", who: cw, bad: bad, ok: nOk, note: (s.note || "").trim(), it: (s.it || []).slice() });
       });
       return;
     }
@@ -1720,6 +1720,33 @@ function msumQr(y, m) {
     ovl().appendChild(v); stop.focus();
   }, function (e) { toast("做不了 QR：" + errText(e)); });
 }
+function msumDet(S0) {
+  var o = { bag: [], pid: [], sg: [], items: [] }, yn = function (v) { return v === "ng" ? { v: "不符", red: 1 } : YN[v] || ""; }, ynx = function (v) { return v === "ng" ? "不符" : YN[v] || ""; };
+  Object.keys(S0.dd || {}).sort().forEach(function (dk) {
+    var D = S0.dd[dk];
+    D.bag.forEach(function (b) {
+      o.bag.push([dk, b.site, b.who, b.no, b.n, yn(b.a), yn(b.b), [b.am ? "列印：" + b.am : "", b.bm ? "調劑：" + b.bm : ""].filter(Boolean).join("；")]);
+      [["藥袋列印品質", b.a, b.am], ["藥袋調劑品質", b.b, b.bm]].forEach(function (t) { if (t[1] === "ok" || t[1] === "ng") o.items.push([dk, b.site, FORMS.bag, b.who, b.no, b.n === "" ? "" : (isNaN(+b.n) ? b.n : +b.n), t[0], ynx(t[1]), t[2] || ""]); });
+    });
+    D.pid.forEach(function (p) {
+      o.pid.push([dk, p.site, p.obj, p.ap, p.who, p.bad.length ? { v: p.bad.join("、"), red: 1 } : p.ok ? "全部符合" : "（沒勾）", p.note]);
+      (p.it || []).forEach(function (v, j) { if ((v === "ok" || v === "ng") && PID_ITEMS[j]) o.items.push([dk, p.site, FORMS.pid, p.who, p.obj + (p.ap ? "（" + p.ap + "）" : ""), "", pidShort(j), ynx(v), p.note || ""]); });
+    });
+    (D.sg || []).forEach(function (b) {
+      o.sg.push([dk, b.site, b.who, b.no, yn(b.a), yn(b.b)]);
+      [["醫師簽章", b.a], ["藥師簽章", b.b]].forEach(function (t) { if (t[1] === "ok" || t[1] === "ng") o.items.push([dk, b.site, FORMS.sig, b.who, b.no, "", t[0], ynx(t[1]), ""]); });
+    });
+  });
+  return o;
+}
+function msumDetSecs(S0) {
+  var d = msumDet(S0), out = [], t0 = "一二三四五六七八九十".charAt(S0.secs.length) + "、明細（每一列）・";
+  var T = function (x) { var t = (out.length ? "　・" : t0) + x; return t; };
+  if (d.bag.length) out.push({ t: T(FORMS.bag + "（" + d.bag.length + " 列）"), head: ["日期", "院區", "查檢者", "領藥號", "筆數", "列印品質", "調劑品質", "不符事項"], w: [13, 10, 16, 10, 7, 10, 10, 24], rows: d.bag });
+  if (d.pid.length) out.push({ t: T(FORMS.pid + "（" + d.pid.length + " 段）"), head: ["日期", "院區", "查檢對象", "上／下午", "查檢者", "不符的項目", "備註"], w: [13, 10, 17, 9, 16, 20, 15], rows: d.pid });
+  if (d.sg.length) out.push({ t: T(FORMS.sig + "（" + d.sg.length + " 列）"), head: ["日期", "院區", "查檢者", "領藥號", "醫師簽章", "藥師簽章"], w: [16, 14, 22, 16, 16, 16], rows: d.sg });
+  return out;
+}
 function msumPdf(y, m) {
   var S0 = msumSecs(y, m), F = "'Noto Sans TC','PingFang TC','Microsoft JhengHei',sans-serif", pages = [], g = null, cvs = null, L = 70, Wd = A4.w - 140, yy = 0, BOT = A4.h - 90;
   var newPage = function () {
@@ -1751,7 +1778,7 @@ function msumPdf(y, m) {
     } };
   };
   newPage();
-  S0.secs.forEach(function (s) {
+  S0.secs.concat(msumDetSecs(S0)).forEach(function (s) {
     var xs = [L]; s.w.forEach(function (w) { xs.push(xs[xs.length - 1] + Wd * w / 100); });
     var hd = drawRow(s, xs, s.head, true);
     if (yy + 50 + hd.h + 42 > BOT) newPage();
@@ -1779,9 +1806,9 @@ function msumXlsx(y, m) {
     rows.push(s.head.map(function (h) { return { v: h, s: 1 }; }));
     s.rows.forEach(function (r) { rows.push(r.map(X)); });
   });
-  var last = S0.secs[S0.secs.length - 1], dayS = S0.secs.filter(function (s) { return s.day || s.mon; })[0];
-  var ngRows = [last.head].concat(/沒有不符/.test(cv0(last.rows[0][0])) ? [] : last.rows.map(function (r) { return r.map(X); }));
-  save(xlsx([{ name: "彙整", cols: [44, 14, 13, 16, 13, 16, 14], rows: rows }, { name: "不符明細", cols: [12, 10, 16, 18, 22, 30, 18], rows: ngRows, filter: true }, { name: +m ? "每日" : "每月", cols: [14, 12, 15, 15, 12, 12], rows: [dayS.head].concat(dayS.rows.map(function (r) { return r.map(X); })) }]), "qc-sum-" + y + (+m ? "-" + pad2(m) : "-year") + ".xlsx");
+  var it = msumDet(S0).items, dat = [["日期", "院區", "表單", "查檢者", "領藥號／查檢對象", "筆數", "項目", "結果", "不符事項／備註"]].concat(it.map(function (r) { return r.map(function (v, i) { return i === 7 && v === "不符" ? { v: v, s: 2 } : v; }); }));
+  save(xlsx([{ name: "總計", cols: [44, 14, 13, 16, 13, 16, 14], rows: rows }, { name: "資料", cols: [12, 10, 22, 16, 18, 7, 24, 8, 30], rows: dat, filter: true }]), "qc-sum-" + y + (+m ? "-" + pad2(m) : "-year") + ".xlsx");
+  window.__lastMsumX = { items: it.length };
   toast("⬇ " + msTtl(y, m) + " 彙整 Excel");
 }
 function makePdf(rec, prev) {
