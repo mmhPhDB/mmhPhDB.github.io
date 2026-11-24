@@ -1,5 +1,5 @@
 "use strict";
-var PHV = "1.7（第 82 批・簽名移到最後・開發者分開）";
+var PHV = "1.8（第 83 批・不符率修正）";
 var XRE = /^[A-Za-z0-9_-]{20,120}$/, TRE = /^[0-9a-f]{32}$/;
 var X = "", T = "", DK = "", SHR = "", ME = null, IDLE_MIN = 30, LAST = Date.now(), PING = 0, IDT = 0;
 var APP = null;
@@ -1481,14 +1481,14 @@ function save(blob, name) {
 var YN = { ok: "符合", ng: "不符" };
 function yearXlsx(y) {
   var list = yearRecs(y), sd = [["月份", "送出時間", "院區", "查檢者", "第幾列", "日期", "領藥號", "醫師簽章", "藥師簽章", "修改紀錄"]], st = [["月份", "份數", "藥袋（份）", "病人辨識（份）", "處方簽章（份）", "填的列數／段數", "不符（筆）", "有不符的份數", "不符率"]], pd = [["月份", "送出時間", "院區", "第幾段", "查檢對象員工編號", "查檢對象", "日期", "上／下午", "查檢者"].concat(PID_ITEMS.map(function (t, j) { return "第 " + (j + 1) + " 項"; }), ["備註", "修改紀錄"])], det = [["月份", "送出時間", "院區", "查檢者", "第幾列", "日期", "領藥號", "筆數", "藥袋列印品質", "不符事項", "藥袋調劑品質", "不符事項", "修改紀錄"]];
-  var tot = [0, 0, 0, 0, 0, 0, 0];
+  var tot = [0, 0, 0, 0, 0, 0, 0, 0];
   for (var m = 1; m <= 12; m++) {
-    var L = list.filter(function (r) { return r.at.getMonth() + 1 === m; }), used = 0, ng = 0, ngf = 0, nb = 0, np = 0, ns = 0;
-    L.forEach(function (r) { used += r.used; ng += r.ng; if (r.ng) ngf++; if (r.form === "pid") np++; else if (r.form === "sig") ns++; else nb++; });
-    tot[0] += L.length; tot[1] += used; tot[2] += ng; tot[3] += ngf; tot[4] += nb; tot[5] += np; tot[6] += ns;
-    st.push([m + " 月", L.length, nb, np, ns, used, ng ? { v: ng, s: 2 } : 0, ngf, used ? Math.round(ng / used * 1000) / 10 + "%" : "—"]);
+    var L = list.filter(function (r) { return r.at.getMonth() + 1 === m; }), used = 0, ng = 0, ngf = 0, nb = 0, np = 0, ns = 0, ck = 0;
+    L.forEach(function (r) { used += r.used; ck += chkOf(r); ng += r.ng; if (r.ng) ngf++; if (r.form === "pid") np++; else if (r.form === "sig") ns++; else nb++; });
+    tot[0] += L.length; tot[1] += used; tot[2] += ng; tot[3] += ngf; tot[4] += nb; tot[5] += np; tot[6] += ns; tot[7] += ck;
+    st.push([m + " 月", L.length, nb, np, ns, used, ng ? { v: ng, s: 2 } : 0, ngf, pctOf(ng, ck)]);
   }
-  st.push([{ v: "全年", s: 1 }, { v: tot[0], s: 1 }, { v: tot[4], s: 1 }, { v: tot[5], s: 1 }, { v: tot[6], s: 1 }, { v: tot[1], s: 1 }, { v: tot[2], s: tot[2] ? 2 : 1 }, { v: tot[3], s: 1 }, { v: tot[1] ? Math.round(tot[2] / tot[1] * 1000) / 10 + "%" : "—", s: 1 }]);
+  st.push([{ v: "全年", s: 1 }, { v: tot[0], s: 1 }, { v: tot[4], s: 1 }, { v: tot[5], s: 1 }, { v: tot[6], s: 1 }, { v: tot[1], s: 1 }, { v: tot[2], s: tot[2] ? 2 : 1 }, { v: tot[3], s: 1 }, { v: pctOf(tot[2], tot[7]), s: 1 }]);
   list.forEach(function (r) {
     var eds = (r.edits || []).map(function (e) { return e.who + " " + fmtAt(e.at); }).join("；");
     if (r.form === "pid") {
@@ -1511,21 +1511,22 @@ function yearXlsx(y) {
   toast("⬇ 整年 Excel：藥袋 " + (det.length - 1) + " 筆、病人辨識 " + (pd.length - 1) + " 段、處方簽章 " + (sd.length - 1) + " 列");
 }
 function monthRecs(y, m) { return yearRecs(y).filter(function (r) { return r.at.getMonth() + 1 === +m; }); }
+function chkOf(r) { var c = 0, J = function (v) { if (v === "ok" || v === "ng") c++; }; if (r.form === "pid") (r.secs || []).forEach(function (x) { if (secUsed(x)) (x.it || []).forEach(J); }); else (r.rows || []).forEach(function (d) { if (rowUsed(d)) { J(d.a); J(d.b); } }); return c; }
 function pctOf(a, b) { return b ? Math.round(a / b * 1000) / 10 + "%" : "—"; }
 function dayKey(s) { var p = parse(s); return p ? p.y + "/" + pad2(p.m) + "/" + pad2(p.dd) : ""; }
 function pidShort(j) { return PID_ITEMS[j].replace(/^\d+\./, "").split(/[，(（]/)[0]; }
 function msumSecs(y, m) {
   var list = +m ? monthRecs(y, m) : yearRecs(y), secs = [], sname = function (id) { return (SITES[id] || { name: id || "—" }).name; };
-  var ov = {}, tot = { n: 0, u: 0, ng: 0, nf: 0 };
+  var ov = {}, tot = { n: 0, u: 0, ng: 0, nf: 0, c: 0 };
   var bag = { rows: 0, pcs: 0, a: { ok: 0, ng: 0 }, b: { ok: 0, ng: 0 } }, pid = { secs: 0, it: PID_ITEMS.map(function () { return { ok: 0, ng: 0, no: 0 }; }) }, sg = { rows: 0, a: { ok: 0, ng: 0 }, b: { ok: 0, ng: 0 } };
   var who = {}, day = {}, ngs = [], dd = {};
   var DD = function (k, r) { var o = dd[k] || (dd[k] = { bag: [], pid: [], sg: [], recs: [] }); if (o.recs.indexOf(r) < 0) o.recs.push(r); return o; };
   var W = function (k) { return who[k] || (who[k] = { bf: 0, br: 0, ps: 0, sr: 0, ng: 0 }); };
   var D = function (k) { return day[k] || (day[k] = { b: 0, p: 0, s: 0, ng: 0 }); };
   list.forEach(function (r) {
-    var f = r.form || "bag", k = f + "|" + r.site, o = ov[k] || (ov[k] = { f: f, s: r.site, n: 0, u: 0, ng: 0, nf: 0 });
-    o.n++; o.u += r.used; o.ng += r.ng; if (r.ng) o.nf++;
-    tot.n++; tot.u += r.used; tot.ng += r.ng; if (r.ng) tot.nf++;
+    var f = r.form || "bag", k = f + "|" + r.site, o = ov[k] || (ov[k] = { f: f, s: r.site, n: 0, u: 0, ng: 0, nf: 0, c: 0 }), rc = chkOf(r);
+    o.n++; o.u += r.used; o.ng += r.ng; o.c += rc; if (r.ng) o.nf++;
+    tot.n++; tot.u += r.used; tot.ng += r.ng; tot.c += rc; if (r.ng) tot.nf++;
     if (f === "pid") {
       (r.secs || []).forEach(function (s) {
         if (!secUsed(s)) return;
@@ -1570,8 +1571,8 @@ function msumSecs(y, m) {
     });
   });
   var B = function (v) { return { v: v, b: 1 }; }, R = function (v) { return v ? { v: v, red: 1 } : 0; };
-  var ovr = Object.keys(ov).sort().map(function (k) { var o = ov[k]; return [FORMS[o.f], sname(o.s), o.n, o.u, R(o.ng), o.nf, pctOf(o.ng, o.u)]; });
-  ovr.push([B("合計"), B(""), B(tot.n), B(tot.u), tot.ng ? { v: tot.ng, b: 1, red: 1 } : B(0), B(tot.nf), B(pctOf(tot.ng, tot.u))]);
+  var ovr = Object.keys(ov).sort().map(function (k) { var o = ov[k]; return [FORMS[o.f], sname(o.s), o.n, o.u, R(o.ng), o.nf, pctOf(o.ng, o.c)]; });
+  ovr.push([B("合計"), B(""), B(tot.n), B(tot.u), tot.ng ? { v: tot.ng, b: 1, red: 1 } : B(0), B(tot.nf), B(pctOf(tot.ng, tot.c))]);
   var NUM = "一二三四五六七八九十", ni = 0, no = function () { return NUM.charAt(ni++) + "、"; };
   var hasB = list.some(function (r) { return (r.form || "bag") === "bag"; }), hasP = list.some(function (r) { return r.form === "pid"; }), hasS = list.some(function (r) { return r.form === "sig"; });
   secs.push({ t: no() + "總覽（表單 × 院區）", head: ["表單", "院區", "份數", "填的列／段", "不符（筆）", "有不符的份數", "不符率"], w: [20, 16, 10, 14, 13, 15, 12], rows: ovr });
@@ -1586,9 +1587,9 @@ function msumSecs(y, m) {
   secs.push({ day: 1, t: no() + "每日（照表上填的日期）", head: dh, w: hasS ? [24, 19, 19, 19, 19] : [31, 23, 23, 23], rows: Object.keys(day).sort().map(function (k) { var o = day[k]; return [k, o.b, o.p].concat(hasS ? [o.s] : [], [R(o.ng)]); }) });
   } else {
   var mon = {};
-  list.forEach(function (r) { var k = r.at.getMonth() + 1, o = mon[k] || (mon[k] = { n: 0, nf: 0, u: 0, ng: 0 }); o.n++; o.u += r.used; o.ng += r.ng; if (r.ng) o.nf++; });
-  var mrows = []; for (var mi = 1; mi <= 12; mi++) { var o2 = mon[mi]; mrows.push([mi + " 月", o2 ? o2.n : 0, o2 ? o2.u : 0, R(o2 ? o2.ng : 0), o2 ? o2.nf : 0, o2 ? pctOf(o2.ng, o2.u) : "—"]); }
-  mrows.push([B("合計"), B(tot.n), B(tot.u), tot.ng ? { v: tot.ng, b: 1, red: 1 } : B(0), B(tot.nf), B(pctOf(tot.ng, tot.u))]);
+  list.forEach(function (r) { var k = r.at.getMonth() + 1, o = mon[k] || (mon[k] = { n: 0, nf: 0, u: 0, ng: 0, c: 0 }); o.n++; o.u += r.used; o.ng += r.ng; o.c += chkOf(r); if (r.ng) o.nf++; });
+  var mrows = []; for (var mi = 1; mi <= 12; mi++) { var o2 = mon[mi]; mrows.push([mi + " 月", o2 ? o2.n : 0, o2 ? o2.u : 0, R(o2 ? o2.ng : 0), o2 ? o2.nf : 0, o2 ? pctOf(o2.ng, o2.c) : "—"]); }
+  mrows.push([B("合計"), B(tot.n), B(tot.u), tot.ng ? { v: tot.ng, b: 1, red: 1 } : B(0), B(tot.nf), B(pctOf(tot.ng, tot.c))]);
   secs.push({ mon: 1, t: no() + "每月（照送出的月份）", head: ["月份", "份數", "填的列／段", "不符（筆）", "有不符的份數", "不符率"], w: [20, 16, 16, 16, 16, 16], rows: mrows });
   }
   ngs.sort(function (a, b) { return a[0] < b[0] ? -1 : a[0] > b[0] ? 1 : 0; });
