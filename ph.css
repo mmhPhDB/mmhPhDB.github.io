@@ -89,3 +89,6 @@ html,body{margin:0;background:var(--bg);color:var(--ink);font:16px/1.6 system-ui
 .ph-foot{margin-top:18px}
 @media (max-width:640px){.ph-steps{grid-template-columns:minmax(0,1fr)}.ph-scr.wide .ph-card{padding:22px 16px 18px}}
 .ph-code1::placeholder{letter-spacing:.04em;font-size:16px}
+.phrt .devt{padding:4px 10px;white-space:nowrap;font-weight:700;color:var(--muted,#6B7680)}
+.phrt .devt.on{background:#E8F6EE;border-color:#1B7F5C;color:#1B7F5C}
+.phrt .devt:disabled{opacity:1;cursor:not-allowed}
